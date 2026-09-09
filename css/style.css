@@ -1,0 +1,856 @@
+@charset "UTF-8";
+
+/* ==============================================================================
+ * 歷史情境模擬 RPG - MOBA 戰場與沉浸式手遊介面 (MOBA Battlefield UI & Styling)
+ * ============================================================================== */
+
+:root {
+  --bg-dark: #070a12;
+  --moba-blue: #0284c7;
+  --moba-gold: #f59e0b;
+  --moba-gold-glow: rgba(245, 158, 11, 0.6);
+  --moba-cyan: #38bdf8;
+  --moba-red: #ef4444;
+  --moba-panel: rgba(10, 16, 30, 0.82);
+  --moba-border: rgba(56, 189, 248, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-dark);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Noto Serif TC", sans-serif;
+  touch-action: none;
+}
+
+/* 遊戲主畫布容器 */
+#game-viewport {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #111a2e 0%, #060911 100%);
+}
+
+#game-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 金幣與全屏 VFX 畫布 */
+#coin-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* Glassmorphism 科技/古風面板 */
+.glass-panel {
+  background: var(--moba-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--moba-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* MOBA 頂部 HUD (彈性三欄排版，徹底杜絕橫向重疊擠壓) */
+.moba-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px 8px 158px; /* 避開左上角 135px 小地圖 */
+  gap: 12px;
+}
+
+.moba-header > * {
+  pointer-events: auto;
+}
+
+/* 小地圖容器 */
+.minimap-container {
+  width: 135px;
+  height: 135px;
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 45;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 2px solid rgba(245, 158, 11, 0.7);
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.9), inset 0 0 15px rgba(0, 0, 0, 0.5);
+  background: #090e1a;
+}
+
+#minimap-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.minimap-overlay {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #fde047;
+  text-shadow: 0 1px 4px black;
+  letter-spacing: 0.5px;
+}
+
+/* 左側快捷裝備/奇物推薦欄 */
+.quick-shop-panel {
+  position: absolute;
+  left: 14px;
+  top: 160px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.gold-counter-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+  border: 2px solid #ca8a04;
+  box-shadow: 0 0 18px rgba(234, 179, 8, 0.4);
+  padding: 8px 16px;
+  border-radius: 14px;
+}
+
+.quick-item-card {
+  width: 195px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 2px solid rgba(245, 158, 11, 0.55);
+  border-radius: 14px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+}
+
+.quick-item-card:hover {
+  transform: translateX(6px) scale(1.03);
+  border-color: #facc15;
+  box-shadow: 0 0 22px rgba(250, 204, 21, 0.55);
+}
+
+.quick-item-card:active {
+  transform: scale(0.96);
+}
+
+/* 頂部中央戰局 / 題目指引告示條 */
+/* 頂部中央戰局 / 題目指引告示條 (融入 header，隨螢幕寬度自適應) */
+.event-quest-banner {
+  flex: 1;
+  max-width: 620px;
+  min-width: 260px;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.quest-pill {
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.98) 15%, rgba(15, 23, 42, 0.98) 85%, rgba(15, 23, 42, 0.85));
+  border-top: 2px solid rgba(245, 158, 11, 0.7);
+  border-bottom: 2px solid rgba(245, 158, 11, 0.7);
+  padding: 6px 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+}
+
+/* MOBA 首殺！高光橫幅特效 (如截圖中央 首殺！) */
+#crit-banner {
+  position: fixed;
+  top: 22%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 90;
+  pointer-events: none;
+  text-align: center;
+  transition: opacity 0.3s;
+}
+
+.moba-kill-banner {
+  background: linear-gradient(90deg, transparent 0%, rgba(220, 38, 38, 0.95) 25%, rgba(245, 158, 11, 0.98) 50%, rgba(220, 38, 38, 0.95) 75%, transparent 100%);
+  padding: 12px 60px;
+  border-top: 2px solid #fef08a;
+  border-bottom: 2px solid #fef08a;
+  box-shadow: 0 0 60px rgba(239, 68, 68, 0.9), 0 0 30px rgba(245, 158, 11, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  animation: killBannerPop 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes killBannerPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(40px);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.18) translateY(-5px);
+  }
+  50% {
+    transform: scale(1.0) translateY(0);
+  }
+  80% {
+    opacity: 1;
+    transform: scale(1.0) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+}
+
+/* 左下角虛擬搖桿 (Virtual Joystick) */
+#joystick-zone {
+  position: absolute;
+  bottom: 24px;
+  left: 30px;
+  width: 160px;
+  height: 160px;
+  z-index: 50;
+  touch-action: none;
+}
+
+.joystick-base {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(15, 23, 42, 0.6) 0%, rgba(30, 58, 138, 0.3) 70%, rgba(56, 189, 248, 0.25) 100%);
+  border: 2px solid rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 25px rgba(2, 132, 199, 0.4), inset 0 0 20px rgba(2, 132, 199, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.joystick-stick {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #60a5fa, #1d4ed8 75%, #1e3a8a 100%);
+  border: 2px solid #93c5fd;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8), 0 0 15px rgba(96, 165, 250, 0.7);
+  transform: translate(0, 0);
+  cursor: grab;
+  transition: transform 0.05s ease-out;
+}
+
+.joystick-arrows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* 右下角 MOBA 戰鬥與技能輪盤 (Combat Action Wheel) */
+#action-wheel {
+  position: absolute;
+  bottom: 24px;
+  right: 28px;
+  width: 270px;
+  height: 270px;
+  z-index: 50;
+  pointer-events: none;
+}
+
+#action-wheel > * {
+  pointer-events: auto;
+}
+
+/* 巨型主交涉/攻擊按鈕 */
+.btn-primary-attack {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 102px;
+  height: 102px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #38bdf8, #0284c7 60%, #0369a1 100%);
+  border: 3.5px solid #e0f2fe;
+  box-shadow: 0 0 30px rgba(56, 189, 248, 0.8), inset 0 2px 6px rgba(255, 255, 255, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  transition: all 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.btn-primary-attack:active, .btn-primary-attack.pressed {
+  transform: scale(0.92);
+  box-shadow: 0 0 40px rgba(250, 204, 21, 0.95);
+  border-color: #fde047;
+}
+
+.btn-primary-attack .attack-icon {
+  font-size: 38px;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.8));
+}
+
+.btn-primary-attack .attack-label {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 3px black;
+  margin-top: -1px;
+}
+
+/* 周圍環形技能按鈕 */
+.skill-btn {
+  position: absolute;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #1e293b, #0f172a 75%, #020617 100%);
+  border: 2.5px solid rgba(245, 158, 11, 0.85);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.9), 0 0 20px rgba(245, 158, 11, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fef08a;
+  cursor: pointer;
+  transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.skill-btn:hover {
+  border-color: #fde047;
+  box-shadow: 0 0 28px rgba(250, 204, 21, 0.8);
+  transform: scale(1.08);
+}
+
+.skill-btn:active {
+  transform: scale(0.92);
+}
+
+.skill-btn .skill-icon {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.skill-btn .skill-label {
+  font-size: 12.5px;
+  font-weight: 900;
+  margin-top: 2px;
+  text-shadow: 0 1px 4px black;
+}
+
+/* 技能位置排布 */
+#skill-sprint { bottom: 12px; right: 138px; }
+#skill-radar  { bottom: 98px; right: 132px; }
+#skill-dock   { bottom: 142px; right: 42px; }
+#skill-recall { bottom: 180px; right: 138px; width: 54px; height: 54px; }
+
+/* 技能加點與冷卻覆蓋 */
+.skill-cooldown-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 900;
+  color: #f87171;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 地面選項提示卡 (踏入法陣時浮現之互動氣泡 - 大字清晰、點擊流暢) */
+#zone-prompt-bubble {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: auto;
+  min-width: 380px;
+  max-width: 560px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+#zone-prompt-bubble #bubble-loc-name {
+  font-size: 26px !important;
+  font-weight: 900 !important;
+}
+
+#zone-prompt-bubble #bubble-decision-text {
+  font-size: 21.5px !important;
+  line-height: 1.45 !important;
+  font-weight: 900 !important;
+}
+
+#zone-prompt-bubble #bubble-confirm-btn {
+  font-size: 21px !important;
+  font-weight: 900 !important;
+  cursor: pointer !important;
+}
+
+/* 飄字動畫 (Float text for gold and reputation) */
+.moba-float-text {
+  position: absolute;
+  pointer-events: none;
+  font-weight: 900;
+  text-shadow: 0 2px 8px black;
+  animation: floatUp 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 80;
+}
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1.2);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(-50px) scale(1.0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-75px) scale(0.9);
+  }
+}
+
+/* 自訂彈窗深色 MOBA 質感 */
+.moba-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(4, 8, 18, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* 底部常駐東方古風操作小儀表盤 (Interactive Control Hints Bar) */
+.control-hints-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  background: rgba(10, 15, 26, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 2px solid rgba(245, 158, 11, 0.65);
+  border-radius: 9999px;
+  padding: 8px 24px;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.85), 0 0 18px rgba(245, 158, 11, 0.3), inset 0 1px 0 rgba(254, 240, 138, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #f8fafc;
+  pointer-events: auto;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.control-hints-bar:hover {
+  border-color: #facc15;
+  box-shadow: 0 0 35px rgba(250, 204, 21, 0.6);
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.hint-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hint-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 1.5px solid rgba(250, 204, 21, 0.7);
+  color: #fef08a;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.6);
+}
+
+/* 遊戲內無阻礙優雅浮動通知 (Toast Notification) */
+#game-toast {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  z-index: 100;
+  background: linear-gradient(135deg, rgba(20, 26, 42, 0.96), rgba(11, 16, 28, 0.98));
+  border: 1.8px solid #f59e0b;
+  border-radius: 14px;
+  padding: 10px 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(245, 158, 11, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fef08a;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#game-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* 碼頭打工貨物戳章效果 */
+.cargo-stamped {
+  position: relative;
+  overflow: hidden;
+  border-color: #22c55e !important;
+  background: rgba(20, 83, 45, 0.5) !important;
+  pointer-events: none;
+}
+
+.cargo-stamped::after {
+  content: '驗訖 ✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-15deg);
+  background: rgba(220, 38, 38, 0.92);
+  color: #fef08a;
+  font-family: "Noto Serif TC", serif;
+  font-weight: 900;
+  font-size: 16px;
+  padding: 4px 16px;
+  border: 2px solid #fef08a;
+  border-radius: 6px;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.8);
+}
+
+/* ==============================================================================
+ * 玩家自家商邸 (Player Estate & Wardrobe UI)
+ * ============================================================================== */
+
+.estate-modal-card {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(10, 15, 30, 0.98));
+  border: 2px solid rgba(245, 158, 11, 0.7);
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.9), 0 0 25px rgba(245, 158, 11, 0.25);
+}
+
+.home-tab-btn {
+  padding: 8px 18px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 14px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #94a3b8;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+}
+
+.home-tab-btn:hover {
+  color: #fef08a;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.home-tab-btn.active {
+  color: #0f172a;
+  background: linear-gradient(135deg, #facc15, #f59e0b);
+  border-color: #fde047;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.5);
+}
+
+.estate-tier-badge {
+  background: linear-gradient(135deg, #ca8a04, #854d0e);
+  color: #fef08a;
+  padding: 3px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid rgba(254, 240, 138, 0.6);
+}
+
+.outfit-card {
+  background: rgba(15, 23, 42, 0.9);
+  border: 2px solid rgba(56, 189, 248, 0.25);
+  border-radius: 16px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.outfit-card:hover {
+  border-color: #38bdf8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 18px rgba(56, 189, 248, 0.3);
+}
+
+.outfit-card.active-equipped {
+  border-color: #f59e0b;
+  background: rgba(40, 30, 15, 0.9);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.45);
+}
+
+.rent-chest-box {
+  background: radial-gradient(circle at center, rgba(180, 83, 9, 0.35) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 2px dashed rgba(245, 158, 11, 0.6);
+  border-radius: 20px;
+  padding: 16px 20px;
+}
+
+/* ==============================================================================
+ * 全局彈窗字體精確大幅放大（維持框體適中，徹底消除細碎小字，大幅提升可讀性）
+ * ============================================================================== */
+
+/* 1. 行商秘笈彈窗 (使用者核心反饋：框不放大、字距不拉大、文字顯著加大填滿空間) */
+#clue-modal .parchment-bg {
+  max-width: 480px; /* 框體保持緊湊，不霸佔全螢幕 */
+}
+
+#clue-modal #clue-title {
+  font-size: 28px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+#clue-modal #clue-rarity {
+  font-size: 14.5px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+#clue-modal .clue-header-tip,
+#clue-modal .clue-header-lore,
+#clue-modal h4 {
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+#clue-modal #clue-gameplay-tip {
+  font-size: 20px !important;
+  line-height: 1.55 !important;
+  font-weight: 700 !important;
+  letter-spacing: normal !important;
+  color: #fef9c3 !important;
+}
+
+#clue-modal #clue-historical-lore {
+  font-size: 19.5px !important;
+  line-height: 1.55 !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+  color: #f8fafc !important;
+}
+
+#clue-modal button {
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+/* 2. 新手玩法入門指引彈窗 (大白話指南字體加大) */
+#help-modal h3 {
+  font-size: 26px !important;
+  font-weight: 900 !important;
+}
+
+#help-modal h4 {
+  font-size: 21.5px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+#help-modal p,
+#help-modal li {
+  font-size: 19.5px !important;
+  line-height: 1.6 !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+}
+
+#help-modal button {
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+/* 3. 碼頭打工與小遊戲彈窗 */
+#minigame-modal p {
+  font-size: 19.5px !important;
+  line-height: 1.6 !important;
+  letter-spacing: normal !important;
+}
+
+#minigame-modal .cargo-btn-title {
+  font-size: 19.5px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+#minigame-modal .cargo-btn-sub {
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: normal !important;
+}
+
+#minigame-modal #minigame-progress-text {
+  font-size: 18.5px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+/* 4. 決策後果結算彈窗 */
+#consequence-modal #cons-title {
+  font-size: 24px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+#consequence-modal #cons-narrative {
+  font-size: 20.5px !important;
+  line-height: 1.6 !important;
+  font-weight: 700 !important;
+  letter-spacing: normal !important;
+}
+
+#consequence-modal #cons-lore {
+  font-size: 19.5px !important;
+  line-height: 1.6 !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+}
+
+#consequence-modal #cons-profit {
+  font-size: 19.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: normal !important;
+}
+
+#consequence-modal button {
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+/* 5. 自家商邸彈窗字體大化 */
+#home-modal h3 {
+  font-size: 25px !important;
+  font-weight: 900 !important;
+}
+
+#home-modal h4 {
+  font-size: 22px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+#home-modal p {
+  font-size: 18px !important;
+  line-height: 1.55 !important;
+  letter-spacing: normal !important;
+}
+
+#home-modal #home-next-buff {
+  font-size: 18.5px !important;
+  line-height: 1.55 !important;
+  letter-spacing: normal !important;
+}
+
+#home-modal button {
+  font-size: 18.5px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+#home-modal .home-tab-btn {
+  font-size: 17px !important;
+  font-weight: 900 !important;
+}
+
+/* 6. 時代圖鑑背包彈窗 */
+#inventory-modal h4 {
+  font-size: 19px !important;
+  font-weight: 900 !important;
+}
+
+#inventory-modal p {
+  font-size: 17.5px !important;
+  line-height: 1.55 !important;
+  letter-spacing: normal !important;
+}
+
+#inventory-modal button {
+  font-size: 18px !important;
+  font-weight: 900 !important;
+}
+
+/* 7. 時代背景縱覽彈窗 */
+#lore-modal #lore-content {
+  font-size: 19.5px !important;
+  line-height: 1.65 !important;
+  font-weight: 600 !important;
+  letter-spacing: normal !important;
+}
+
+#lore-modal button {
+  font-size: 18.5px !important;
+  font-weight: 900 !important;
+  letter-spacing: normal !important;
+}
+
+
+

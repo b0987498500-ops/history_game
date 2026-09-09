@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>大稻埕 1869 · 臺灣開港行商傳記（MOBA 歷史實境 RPG）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700;900&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            serif: ['"Noto Serif TC"', 'serif'],
+            sans: ['"Noto Sans TC"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#070a12] text-slate-100 font-sans select-none overflow-hidden antialiased">
+
+  <!-- ======================== 遊戲主視口與戰鬥畫布 ======================== -->
+  <div id="game-viewport">
+    <canvas id="game-canvas"></canvas>
+    <canvas id="coin-canvas"></canvas>
+  </div>
+
+  <!-- ======================== MOBA 戰場 HUD ======================== -->
+
+  <!-- 1. 左上角小地圖 (Mini-Map) -->
+  <div class="minimap-container">
+    <canvas id="minimap-canvas" width="135" height="135"></canvas>
+    <div class="minimap-overlay font-serif">📍 大稻埕全域</div>
+    <div class="absolute bottom-1.5 right-1.5 flex items-center gap-1 text-[10px] text-amber-300 font-mono font-bold bg-black/80 px-1.5 py-0.5 rounded border border-amber-500/40">
+      <span>1869 開港</span>
+    </div>
+  </div>
+
+  <!-- 2. 左側快捷商店/奇物欄 -->
+  <div class="quick-shop-panel">
+    <!-- 金幣計數器 -->
+    <div class="gold-counter-badge">
+      <span class="text-amber-400 font-black text-2xl">💰</span>
+      <div>
+        <span class="text-xs text-amber-300 font-extrabold block leading-none">行商銀兩</span>
+        <span id="hud-silver" class="font-black text-amber-200 text-xl font-mono">150 兩</span>
+      </div>
+    </div>
+
+    <!-- 快捷道具 0：自家商邸 (全新家宅系統) -->
+    <div onclick="game.showHomeModal()" class="quick-item-card group" title="點擊進入自家宅邸：建造房屋、更換衣裝、領取店面分紅">
+      <div class="w-11 h-11 rounded-xl bg-emerald-950/90 border-2 border-emerald-500/80 flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform shadow">
+        🏡
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-sm font-black text-emerald-100">承恩宅邸</span>
+          <span id="hud-home-level-badge" class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 font-bold border border-emerald-500/50 font-mono">Lv.1</span>
+        </div>
+        <div class="text-xs text-emerald-300 font-bold mt-0.5 flex items-center gap-0.5">建造·換裝·收租 ▶</div>
+      </div>
+    </div>
+
+    <!-- 快捷道具 1：行商秘笈 (神諭書) -->
+    <div onclick="game.openClueFromQuickShop()" class="quick-item-card group" title="點擊檢視時代行商情報">
+      <div class="w-11 h-11 rounded-xl bg-amber-950/90 border-2 border-amber-500/80 flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform shadow">
+        📜
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-sm font-black text-amber-100">行商秘笈</span>
+          <span id="quick-clue-badge" class="text-xs px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 font-bold border border-amber-500/40">未解鎖</span>
+        </div>
+        <div class="text-xs text-amber-300 font-bold mt-0.5 flex items-center gap-0.5">點擊查看情報 ▶</div>
+      </div>
+    </div>
+
+    <!-- 快捷道具 2：文物奇物 (魔法書) -->
+    <div onclick="game.showInventoryModal()" class="quick-item-card group" title="點擊開啟背包奇物">
+      <div class="w-11 h-11 rounded-xl bg-indigo-950/90 border-2 border-indigo-500/80 flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform shadow">
+        ⏱️
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-sm font-black text-indigo-100">時代奇物</span>
+          <span id="hud-relic-count" class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300 font-bold font-mono border border-indigo-500/40">0 件</span>
+        </div>
+        <div class="text-xs text-indigo-300 font-bold mt-0.5 flex items-center gap-0.5">點擊開啟圖鑑 ▶</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. 頂部狀態與控制列 (自適應排版，徹底杜絕文字與卡片重疊碰撞) -->
+  <header class="moba-header">
+    <!-- 中央歷史決策任務導引條 (支援點擊自動尋路) -->
+    <div class="event-quest-banner" onclick="game.autoNavigateToCurrentQuest()" title="點擊自動尋路前往目標商號！">
+      <div class="quest-pill rounded-full border-2 border-amber-500/70 flex items-center justify-between gap-3 py-2 px-5 shadow-2xl cursor-pointer hover:border-amber-400 transition-colors">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="w-3 h-3 rounded-full bg-amber-400 animate-ping shrink-0"></span>
+          <span id="quest-era-tag" class="font-black text-amber-300 font-serif text-sm sm:text-base shrink-0">同治八年 · 開市</span>
+          <span class="text-amber-500 font-black">|</span>
+          <span id="quest-title-text" class="text-amber-100 font-extrabold text-sm sm:text-base truncate">操縱角色前往目標商號做出商業決策！</span>
+        </div>
+        <div class="flex items-center gap-2.5 shrink-0">
+          <button onclick="event.stopPropagation(); game.autoNavigateToCurrentQuest()" class="px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs sm:text-sm shadow flex items-center gap-1.5 transition-transform active:scale-95 animate-pulse" title="自動尋路走至目標商號">
+            <span>🧭</span>
+            <span>尋路</span>
+          </button>
+          <button onclick="event.stopPropagation(); game.toggleLoreModal()" class="px-3 py-1.5 rounded-full bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 text-xs sm:text-sm font-black border border-amber-400/80 shadow transition-all active:scale-95" title="史實背景">
+            📜 背景
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右側狀態與功能按鈕組 -->
+    <div class="flex items-center gap-3 shrink-0">
+      <!-- 英雄資訊小卡 -->
+      <div class="flex items-center gap-2.5 glass-panel px-3.5 py-1.5 rounded-2xl border-2 border-amber-500/50 text-xs shadow-lg">
+        <div id="hud-avatar" class="text-3xl">🍵</div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="hud-name" class="font-black text-amber-100 text-base">林承恩</span>
+            <span id="hud-tier" class="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/30 text-amber-200 border border-amber-500/60 font-black">布衣挑擔</span>
+          </div>
+          <div class="flex items-center gap-3 text-xs sm:text-sm text-slate-300 mt-0.5 font-bold">
+            <span>🎖️ 聲望: <strong id="hud-reputation" class="text-sky-300 font-black">10</strong></span>
+            <span>📜 閱歷: <strong id="hud-knowledge" class="text-emerald-300 font-black">25</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 經商歷練計時 -->
+      <div class="flex items-center gap-2 glass-panel px-3 py-2 rounded-2xl border border-amber-500/40 text-xs sm:text-sm font-bold shadow" title="本局經商歷練時間">
+        <span class="text-amber-400 text-base">⏱️</span>
+        <span class="text-xs text-slate-300 font-serif">歷練</span>
+        <span id="game-timer" class="font-mono text-emerald-400 font-black text-sm sm:text-base">00:00</span>
+      </div>
+
+      <!-- 玩法說明指引按鈕 (全新大白話教學按鈕) -->
+      <button onclick="game.toggleHelpModal()" 
+        class="h-10 px-3.5 rounded-2xl bg-amber-500/20 hover:bg-amber-500/40 border-2 border-amber-400/90 text-sm font-black text-amber-200 flex items-center gap-1.5 transition-all active:scale-95 shadow" title="玩法入門說明：疾跑與遊戲教學">
+        <span>❓</span>
+        <span class="hidden sm:inline">玩法指引</span>
+      </button>
+
+      <!-- 音效按鈕 -->
+      <button onclick="game.toggleSound()" 
+        class="h-10 px-3 rounded-2xl glass-panel border border-slate-600 hover:border-amber-400 text-sm font-black text-slate-200 flex items-center gap-1.5 transition-all active:scale-95 shadow" title="切換背景音樂與音效開關">
+        <span id="btn-sound-icon">🔊</span>
+        <span id="btn-sound-text" class="hidden sm:inline">音效</span>
+      </button>
+
+      <!-- 背包按鈕 -->
+      <button onclick="game.showInventoryModal()" 
+        class="h-10 px-3.5 rounded-2xl glass-panel border border-amber-500/60 hover:border-amber-400 text-sm font-black text-amber-200 flex items-center gap-1.5 transition-all active:scale-95 shadow" title="開啟行商行囊與歷史圖鑑">
+        <span>🎒</span>
+        <span class="hidden sm:inline">行囊</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 5. MOBA 全屏「首殺！/ 暴擊！」高光橫幅 (重現截圖精髓) -->
+  <div id="crit-banner" class="hidden">
+    <div class="moba-kill-banner">
+      <span class="text-3xl">⚔️</span>
+      <div>
+        <h2 id="crit-banner-title" class="text-3xl md:text-4xl font-black text-yellow-200 tracking-widest drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] font-serif">
+          首殺！時代紅利暴擊！
+        </h2>
+        <p id="crit-banner-sub" class="text-xs md:text-sm text-amber-100 font-bold tracking-wider mt-0.5">
+          利潤 200% · 簽訂外銷合約！
+        </p>
+      </div>
+      <span class="text-3xl">💥</span>
+    </div>
+  </div>
+
+  <!-- 6. 地面選項互動懸浮提示卡 (當角色走入選項法陣時浮現 - 大字清晰、點擊即進) -->
+  <div id="zone-prompt-bubble" class="hidden" onclick="event.stopPropagation()">
+    <div class="glass-panel p-6 rounded-3xl border-2 border-amber-400 shadow-[0_0_40px_rgba(245,158,11,0.7)]">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <span id="bubble-icon" class="text-4xl">🍵</span>
+          <div>
+            <h4 id="bubble-loc-name" class="font-serif font-black text-2xl sm:text-3xl text-amber-200">英商寶順洋行</h4>
+            <p id="bubble-subtitle" class="text-sm sm:text-base text-slate-200 font-bold mt-0.5">外銷主力 · 烏龍茶直銷紐約</p>
+          </div>
+        </div>
+        <span id="bubble-badge" class="text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-full bg-amber-500 text-black shadow">
+          👑 時代核心
+        </span>
+      </div>
+
+      <p id="bubble-decision-text" class="text-lg sm:text-2xl text-amber-100 font-black mb-4 leading-snug bg-black/60 p-4 rounded-2xl border border-white/15">
+        【寶順洋行】收購深坑烏龍茶，直銷紐約大賺一筆！
+      </p>
+
+      <div class="grid grid-cols-3 gap-3 text-center bg-slate-900/90 p-3.5 rounded-2xl border border-white/15 mb-4">
+        <div>
+          <span class="text-slate-300 block text-xs sm:text-sm font-bold">進購本金</span>
+          <span id="bubble-cost" class="font-black text-amber-300 font-mono text-lg sm:text-2xl">100 兩</span>
+        </div>
+        <div>
+          <span class="text-slate-300 block text-xs sm:text-sm font-bold">預估收益</span>
+          <span id="bubble-reward" class="font-black text-emerald-300 font-mono text-lg sm:text-2xl">320 兩</span>
+        </div>
+        <div>
+          <span class="text-slate-300 block text-xs sm:text-sm font-bold">暴擊率</span>
+          <span id="bubble-crit" class="font-black text-red-400 font-mono text-lg sm:text-2xl">65%</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="bubble-confirm-btn" onclick="event.stopPropagation(); game.executeCurrentZoneChoice()" onpointerdown="event.stopPropagation()"
+          class="flex-1 py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-lg sm:text-xl shadow-2xl flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer">
+          <span class="text-xl">🤝</span>
+          <span>確認商號交涉（點擊或按空白鍵）</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. 左下角虛擬搖桿 (Virtual Joystick) -->
+  <div id="joystick-zone">
+    <div class="joystick-base" id="joystick-base">
+      <div class="joystick-arrows flex flex-col items-center justify-between p-2 text-xs font-black text-sky-400 font-mono">
+        <span>▲ W</span>
+        <div class="w-full flex items-center justify-between px-2">
+          <span>◀ A</span>
+          <span>D ▶</span>
+        </div>
+        <span>▼ S</span>
+      </div>
+      <div class="joystick-stick" id="joystick-stick"></div>
+    </div>
+  </div>
+
+  <!-- 8. 右下角 MOBA 技能輪盤與交涉大按鈕 -->
+  <div id="action-wheel">
+    <!-- 技能 1: 疾跑 / 衝刺 (Sprint) -->
+    <button id="skill-sprint" onclick="game.castSkill('sprint')" class="skill-btn group" title="疾跑衝刺：瞬間加速2.5秒奔跑 (J鍵)">
+      <span class="skill-icon group-hover:scale-110 transition-transform">⚡</span>
+      <span class="skill-label">疾跑 <b class="text-xs text-amber-300 font-mono">[J]</b></span>
+      <div id="cd-sprint" class="skill-cooldown-overlay">3s</div>
+    </button>
+
+    <!-- 技能 2: 行商秘笈 / 導引雷達 (Radar) -->
+    <button id="skill-radar" onclick="game.castSkill('radar')" class="skill-btn group" title="探查秘笈最優路徑 (K / 快捷鍵)">
+      <span class="skill-icon group-hover:scale-110 transition-transform">📜</span>
+      <span class="skill-label">探查 <b class="text-xs text-amber-300 font-mono">[K]</b></span>
+      <div id="cd-radar" class="skill-cooldown-overlay">5s</div>
+    </button>
+
+    <!-- 技能 3: 碼頭理貨打工 (Work) -->
+    <button id="skill-dock" onclick="game.startDockMinigame()" class="skill-btn group" title="碼頭理貨打工 (L / 快捷鍵)">
+      <span class="skill-icon group-hover:scale-110 transition-transform">⚓</span>
+      <span class="skill-label">打工 <b class="text-xs text-amber-300 font-mono">[L]</b></span>
+    </button>
+
+    <!-- 召喚師技能: 回家/回城 (Recall) -->
+    <button id="skill-recall" onclick="game.castSkill('recall')" class="skill-btn group border-emerald-400/90 text-emerald-200 shadow-[0_0_20px_rgba(34,197,94,0.4)]" title="回宅邸 (B / 快捷鍵)">
+      <span class="text-lg">🏡</span>
+      <span class="skill-label">回家 <b class="text-[9px] text-emerald-300 font-mono">[B]</b></span>
+    </button>
+
+    <!-- 巨型交涉 / 普攻主按鍵 (Attack / Negotiate) -->
+    <button id="btn-interact" onclick="game.handlePrimaryAction()" class="btn-primary-attack" title="交涉 / 抉擇 (空白鍵 / 點擊)">
+      <span class="attack-icon">🤝</span>
+      <span class="attack-label">交涉商號</span>
+      <span class="text-xs text-amber-200 font-mono font-black mt-0.5">[空白鍵]</span>
+    </button>
+  </div>
+
+  <!-- 9. 底部常駐東方古風操作提示儀表列 (Control Hints Bar) -->
+  <div id="control-hints-bar" class="control-hints-bar">
+    <div class="hint-chip">
+      <span class="hint-key">W A S D</span> 或 <span class="hint-key">滑鼠點擊</span> 移動
+    </div>
+    <span class="text-amber-500/50 font-black">|</span>
+    <div class="hint-chip">
+      <span class="hint-key">空白鍵 Space</span> 交涉/決策
+    </div>
+    <span class="text-amber-500/50 font-black">|</span>
+    <div class="hint-chip">
+      <span class="hint-key">J</span> 疾跑
+    </div>
+    <span class="text-amber-500/50 font-black">|</span>
+    <div class="hint-chip">
+      <span class="hint-key">K</span> 導引雷達
+    </div>
+    <span class="text-amber-500/50 font-black">|</span>
+    <div class="hint-chip">
+      <span class="hint-key">L</span> 碼頭打工
+    </div>
+  </div>
+
+  <!-- 10. 全局非阻塞優雅浮動通知 (Toast) -->
+  <div id="game-toast">
+    <span class="text-xl">💡</span>
+    <span id="toast-text">通知訊息</span>
+  </div>
+
+  <!-- ======================== 模態彈窗組 (Modals) ======================== -->
+
+  <!-- 0. 自家商邸管理彈窗 (Player Home & Wardrobe Modal - 全新系統) -->
+  <div id="home-modal" class="hidden moba-modal-backdrop">
+    <div class="estate-modal-card max-w-xl w-full p-6 sm:p-8 rounded-3xl relative max-h-[90vh] flex flex-col">
+      <!-- 彈窗頂部 -->
+      <div class="flex items-center justify-between pb-4 border-b border-amber-500/30 shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">🏡</span>
+          <div>
+            <h3 class="font-serif font-black text-2xl text-amber-200 flex items-center gap-2">
+              <span>大稻埕 · 承恩商邸</span>
+              <span id="home-modal-badge" class="estate-tier-badge">Lv.1 竹籬茅舍</span>
+            </h3>
+            <p class="text-xs sm:text-sm text-slate-300 font-bold mt-0.5">自家產業營造 · 衣裳閣更換 · 坐收商號店租</p>
+          </div>
+        </div>
+        <button onclick="game.closeModal('home-modal')" class="text-slate-400 hover:text-white text-2xl font-bold p-1">✕</button>
+      </div>
+
+      <!-- 分頁切換鈕 -->
+      <div class="flex items-center gap-2 pt-4 pb-3 shrink-0">
+        <button id="tab-btn-upgrade" onclick="game.switchHomeTab('upgrade')" class="home-tab-btn active flex items-center gap-1.5">
+          <span>🔨</span>
+          <span>宅邸擴建升級</span>
+        </button>
+        <button id="tab-btn-wardrobe" onclick="game.switchHomeTab('wardrobe')" class="home-tab-btn flex items-center gap-1.5">
+          <span>👘</span>
+          <span>衣裳閣換裝</span>
+        </button>
+        <button id="tab-btn-rent" onclick="game.switchHomeTab('rent')" class="home-tab-btn flex items-center gap-1.5">
+          <span>💰</span>
+          <span>商號店租分紅</span>
+        </button>
+      </div>
+
+      <!-- 分頁內容區域 -->
+      <div class="overflow-y-auto py-2 flex-1 pr-1 space-y-4">
+        <!-- 分頁 1: 宅邸擴建 -->
+        <div id="home-tab-content-upgrade" class="space-y-4">
+          <!-- 目前住宅展示卡 -->
+          <div class="p-4 rounded-2xl bg-slate-900/90 border border-amber-500/40 flex items-center gap-4">
+            <div id="home-current-icon" class="w-16 h-16 rounded-2xl bg-amber-950/80 border-2 border-amber-500 flex items-center justify-center text-4xl shrink-0 shadow-lg">
+              🛖
+            </div>
+            <div class="flex-1 min-w-0">
+              <span class="text-sm font-black text-amber-400 uppercase tracking-wider block">當前宅邸現狀</span>
+              <h4 id="home-current-name" class="font-serif font-black text-xl text-amber-100 mt-0.5">臨河竹籬小茅舍</h4>
+              <p id="home-current-desc" class="text-base text-slate-200 mt-1 leading-relaxed">
+                初到大稻埕時賃居的小茅草屋，雖簡樸無華，卻是日後商界傳奇的起點。
+              </p>
+            </div>
+          </div>
+
+          <!-- 下一級擴建預覽卡 -->
+          <div id="home-next-tier-card" class="p-5 rounded-2xl bg-gradient-to-br from-amber-950/40 via-slate-900/90 to-slate-900/90 border-2 border-amber-400 shadow-xl">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-black text-yellow-300 uppercase tracking-wider flex items-center gap-1">
+                <span>✦</span>
+                <span>下一階段擴建工程</span>
+              </span>
+              <span id="home-next-cost-badge" class="text-base font-black font-mono px-3.5 py-1 rounded-full bg-amber-500 text-black shadow">
+                造價：160 兩銀子
+              </span>
+            </div>
+            <h4 id="home-next-name" class="font-serif font-black text-2xl text-amber-200">貴德街紅磚燕尾瓦厝</h4>
+            <p id="home-next-desc" class="text-base text-slate-100 mt-1.5 leading-relaxed"></p>
+
+            <div class="mt-4 p-3.5 rounded-xl bg-black/60 border border-amber-500/40">
+              <div class="text-sm font-black text-amber-300 flex items-center gap-1.5 mb-1">
+                <span>🎁</span>
+                <span>擴建完成可獲得特權加成：</span>
+              </div>
+              <p id="home-next-buff" class="text-base text-emerald-300 font-bold leading-relaxed"></p>
+            </div>
+
+            <button id="btn-upgrade-home" onclick="game.upgradeHome()" 
+              class="w-full mt-4 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-lg shadow-xl flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer">
+              <span>🔨</span>
+              <span>花費銀兩起造新居</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 分頁 2: 衣裳閣換裝 -->
+        <div id="home-tab-content-wardrobe" class="hidden space-y-3">
+          <p class="text-base text-slate-200 mb-2">
+            在大稻埕經商，衣著打扮彰顯身份地位！點擊已解鎖的衣裝即可換裝，<strong>大地圖角色與稱號將立即改變</strong>：
+          </p>
+          <div id="home-outfits-list" class="space-y-3"></div>
+        </div>
+
+        <!-- 分頁 3: 商號店租分紅 -->
+        <div id="home-tab-content-rent" class="hidden space-y-4">
+          <div class="rent-chest-box text-center">
+            <span class="text-5xl block my-2">🏺</span>
+            <h4 class="font-serif font-black text-2xl text-amber-200">大稻埕商號聚寶盆</h4>
+            <p class="text-base text-slate-200 mt-1.5 max-w-sm mx-auto leading-relaxed">
+              升級宅邸後，您名下的商號與鋪面將持續產生店租分紅，銀子會自動累積在聚寶盆中！
+            </p>
+
+            <div class="my-4 p-4 rounded-2xl bg-black/70 border border-amber-500/40 inline-block min-w-[220px]">
+              <span class="text-sm text-amber-300 font-bold block mb-0.5">當前累積可領取租金</span>
+              <span id="home-accumulated-rent" class="text-3xl font-black text-amber-300 font-mono">0 兩</span>
+            </div>
+
+            <div>
+              <button onclick="game.collectHomeRent()" 
+                class="px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-lg shadow-xl transition-transform active:scale-95 cursor-pointer">
+                💰 立即領取店租銀兩
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-white/10 flex items-center justify-between text-sm text-slate-300 shrink-0">
+        <span>🏡 承恩宅邸 · 您在大稻埕的永久私產</span>
+        <button onclick="game.closeModal('home-modal')" class="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-sm cursor-pointer">
+          離開商邸
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 0.5 新手玩法入門指引彈窗 (Help Modal - 框保持適中，字體直接加大清晰易讀) -->
+  <div id="help-modal" class="hidden moba-modal-backdrop">
+    <div class="glass-panel max-w-xl w-full p-6 sm:p-8 rounded-3xl border-2 border-amber-400 shadow-2xl relative max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-4 border-b border-amber-500/40 shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl sm:text-4xl">🧭</span>
+          <div>
+            <h3 class="font-serif font-black text-2xl sm:text-3xl text-amber-200">大稻埕行商入門手冊</h3>
+            <p class="text-sm sm:text-base text-slate-300 font-bold mt-0.5">遊戲核心玩法與操作速懂指南</p>
+          </div>
+        </div>
+        <button onclick="game.closeModal('help-modal')" class="text-slate-400 hover:text-white text-3xl font-bold p-1 leading-none">✕</button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-5 text-slate-100 leading-relaxed text-base sm:text-lg">
+        <!-- 核心目標 -->
+        <div class="p-5 rounded-2xl bg-amber-950/50 border border-amber-500/50">
+          <h4 class="font-black text-amber-300 text-lg sm:text-xl mb-1.5 flex items-center gap-2">
+            <span>🎯</span>
+            <span>你的終極目標是什麼？</span>
+          </h4>
+          <p class="text-base sm:text-lg text-amber-100 font-medium leading-relaxed">
+            你扮演 1869 年初到大稻埕闖蕩的青年「林承恩」。目標是：<strong>做茶葉等生意賺取大把銀兩，把自己的家從小茅屋擴建為大洋樓、換上尊榮的大老闆華服，成為大稻埕第一富商！</strong>
+          </p>
+        </div>
+
+        <!-- 疾跑是什麼 -->
+        <div class="p-5 rounded-2xl bg-sky-950/50 border border-sky-500/50">
+          <h4 class="font-black text-sky-300 text-lg sm:text-xl mb-1.5 flex items-center gap-2">
+            <span>⚡</span>
+            <span>右下角的「疾跑」是什麼功能？</span>
+          </h4>
+          <p class="text-base sm:text-lg text-sky-100 font-medium leading-relaxed">
+            <strong>就是「衝刺加速跑」！</strong> 大稻埕地圖很大，點擊【疾跑】（或鍵盤按 <strong>J 鍵</strong>），角色會像一陣風一樣加速狂奔 2.5 秒，讓你快速穿梭在洋行、碼頭與家宅之間，省去慢慢走路的時間！
+          </p>
+        </div>
+
+        <!-- 平時該幹嘛 -->
+        <div class="p-5 rounded-2xl bg-slate-900/90 border border-white/15">
+          <h4 class="font-black text-amber-300 text-lg sm:text-xl mb-2.5 flex items-center gap-2">
+            <span>🔄</span>
+            <span>不知道該幹嘛時？只要照這四步走：</span>
+          </h4>
+          <ol class="space-y-3 text-base sm:text-lg text-slate-100 list-decimal list-inside font-medium leading-relaxed">
+            <li><strong>看螢幕上方任務條</strong>：告訴你該去哪，點【🧭 尋路】角色會自己走過去！</li>
+            <li><strong>缺錢去碼頭打工</strong>：走到碼頭或按【⚓ 打工(L)】，點 3 箱貨現賺銀子，還能拿到行商秘笈！</li>
+            <li><strong>走進商號發大財</strong>：走到商號門口光圈按【空白鍵】，選對茶葉商路能觸發「200% 紅利暴擊」金幣噴發！</li>
+            <li><strong>賺了銀子回家蓋豪宅</strong>：按【🏡 回家(B)】，花銀兩擴建房子、換新衣服、領取源源不絕的店租！</li>
+          </ol>
+        </div>
+      </div>
+
+      <button onclick="game.closeModal('help-modal')" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-lg sm:text-xl shadow-xl shrink-0 transition-transform active:scale-95 cursor-pointer">
+        我明白了，出發經商！🚀
+      </button>
+    </div>
+  </div>
+
+  <!-- 1. 碼頭打工小遊戲彈窗 (Minigame Modal - 框維持適中，文字清晰大字體) -->
+  <div id="minigame-modal" class="hidden moba-modal-backdrop">
+    <div class="glass-panel max-w-md w-full p-6 sm:p-8 rounded-3xl border-2 border-amber-500/60 shadow-2xl relative">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2.5">
+          <span class="text-3xl">⚓</span>
+          <h3 class="font-serif font-black text-2xl sm:text-3xl text-amber-200">大稻埕碼頭理貨打工</h3>
+        </div>
+        <button onclick="game.closeModal('minigame-modal')" class="text-slate-400 hover:text-white text-3xl font-bold p-1 leading-none">✕</button>
+      </div>
+
+      <p class="text-base sm:text-lg text-slate-100 mb-6 leading-relaxed font-medium">
+        碼頭苦力正忙著將北臺灣各處運抵的商貨裝船。請點擊清點 <strong>3 箱商貨</strong>，即可換取工資並探聽最新商情！
+      </p>
+
+      <div id="minigame-cargos" class="grid grid-cols-2 gap-3 mb-6"></div>
+
+      <div class="flex items-center justify-between pt-4 border-t border-white/15 text-sm sm:text-base font-bold">
+        <span id="minigame-progress-text" class="text-amber-300 font-extrabold text-base sm:text-lg">剩餘理貨目標：3 箱</span>
+        <span class="text-slate-300">輕量打工 · 快速賺錢</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 情報秘笈詳情彈窗 (Clue Modal - 框維持緊湊精美，字體直接放大清晰滿版) -->
+  <div id="clue-modal" class="hidden moba-modal-backdrop">
+    <div class="parchment-bg max-w-md w-full p-6 sm:p-8 rounded-3xl shadow-2xl relative border-2 border-amber-500/80">
+      <div class="text-center mb-5">
+        <span id="clue-rarity" class="text-sm font-black uppercase px-4 py-1.5 rounded-full bg-amber-500 text-black shadow-md inline-block">
+          SSR 必備情報
+        </span>
+        <h3 id="clue-title" class="font-serif font-black text-2xl sm:text-3xl text-amber-100 mt-3">
+          📜 大稻埕行商秘笈
+        </h3>
+      </div>
+
+      <div class="p-4 sm:p-5 rounded-2xl bg-amber-900/50 border border-amber-500/50 mb-4">
+        <div class="flex items-center gap-2 text-lg sm:text-xl font-black text-amber-300 mb-2">
+          <span>💡</span>
+          <span>遊戲通關指引</span>
+        </div>
+        <p id="clue-gameplay-tip" class="text-base sm:text-lg font-bold text-yellow-100 leading-relaxed"></p>
+      </div>
+
+      <div class="p-4 sm:p-5 rounded-2xl bg-slate-900/80 border border-white/15 mb-6">
+        <div class="flex items-center gap-2 text-lg sm:text-xl font-black text-emerald-300 mb-2">
+          <span>📖</span>
+          <span>真實歷史脈絡</span>
+        </div>
+        <p id="clue-historical-lore" class="text-base sm:text-lg font-medium text-slate-100 leading-relaxed"></p>
+      </div>
+
+      <button onclick="game.closeModal('clue-modal')" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-lg sm:text-xl shadow-xl transition-all cursor-pointer">
+        掌握情報，返回戰場
+      </button>
+    </div>
+  </div>
+
+  <!-- 3. 決策後果與結算反饋彈窗 (Consequence Modal - 框維持適中，字體加大) -->
+  <div id="consequence-modal" class="hidden moba-modal-backdrop">
+    <div class="glass-panel max-w-lg w-full p-6 sm:p-8 rounded-3xl border border-white/20 shadow-2xl relative">
+      <div class="mb-4">
+        <span id="cons-title" class="text-2xl sm:text-3xl font-black text-amber-300">【決策結算】</span>
+      </div>
+
+      <p id="cons-narrative" class="text-base sm:text-xl text-slate-100 leading-relaxed font-bold mb-4"></p>
+      <div id="cons-lore" class="mb-6 text-base sm:text-lg text-slate-200 leading-relaxed"></div>
+      <div id="cons-profit" class="flex items-center gap-3 p-4 rounded-2xl bg-slate-900/90 border border-white/15 mb-6 text-base sm:text-lg font-bold"></div>
+
+      <button id="cons-next-btn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-lg sm:text-xl shadow-xl transition-all cursor-pointer">
+        繼續推進歷史進程 →
+      </button>
+    </div>
+  </div>
+
+  <!-- 4. 視覺外觀階層晉升彈窗 (Tier Up Modal) -->
+  <div id="tierup-modal" class="hidden moba-modal-backdrop">
+    <div class="glass-panel max-w-md w-full p-8 rounded-3xl border-2 border-amber-400 shadow-[0_0_50px_rgba(245,158,11,0.5)] text-center relative">
+      <div class="text-amber-400 text-xs sm:text-sm font-black uppercase tracking-widest mb-1">
+        ✦ 視覺躍遷 · 身份晉升 ✦
+      </div>
+      <h2 class="font-serif font-black text-3xl text-white mt-1 mb-4">名揚大稻埕！</h2>
+      <div id="tierup-avatar" class="text-8xl my-4 drop-shadow-[0_10px_25px_rgba(245,158,11,0.6)]">👑</div>
+      <h3 id="tierup-name" class="font-serif font-bold text-2xl text-amber-300">長衫算盤大掌櫃</h3>
+      <p id="tierup-desc" class="text-xs sm:text-sm text-slate-200 mt-2 max-w-xs mx-auto leading-relaxed"></p>
+      <p id="tierup-scene" class="text-xs sm:text-sm text-amber-400/90 font-mono mt-3"></p>
+
+      <button onclick="game.closeModal('tierup-modal')" class="w-full mt-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-base shadow-xl transition-all">
+        執掌新基業
+      </button>
+    </div>
+  </div>
+
+  <!-- 5. 通關歷史評價戰報結算卡 (Social Sharing Card Modal) -->
+  <div id="settlement-modal" class="hidden moba-modal-backdrop">
+    <div class="glass-panel max-w-xl w-full p-6 sm:p-8 rounded-3xl border-2 border-amber-400/80 shadow-[0_0_60px_rgba(245,158,11,0.4)] relative">
+      <div class="text-center pb-6 border-b border-white/10">
+        <div class="inline-block px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs sm:text-sm font-black border border-amber-500/40 mb-2">
+          大稻埕 1869 · 臺灣開港史實輪迴戰報
+        </div>
+        <h2 id="report-title" class="font-serif font-black text-2xl sm:text-3xl text-amber-100">
+          北臺灣茶業傳奇巨擘
+        </h2>
+        <p class="text-xs sm:text-sm text-slate-300 mt-1">商號代表：林承恩 ｜ 結算年代：清同治八年</p>
+      </div>
+
+      <div class="my-6 flex items-center justify-center gap-6">
+        <div class="w-24 h-24 rounded-2xl rank-badge-s flex flex-col items-center justify-center font-black shadow-2xl border-2 border-yellow-300">
+          <span class="text-xs tracking-wider opacity-80">綜合評級</span>
+          <span id="report-rank" class="text-5xl font-serif">S</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3 text-xs sm:text-sm flex-1">
+          <div class="p-3 rounded-xl bg-slate-800/80 border border-white/10">
+            <span class="text-slate-400">總累積銀兩</span>
+            <p id="report-silver" class="text-amber-400 font-black text-lg mt-0.5">850 兩</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-800/80 border border-white/10">
+            <span class="text-slate-400">行郊商界聲望</span>
+            <p id="report-reputation" class="text-blue-400 font-black text-lg mt-0.5">80 點</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-800/80 border border-white/10">
+            <span class="text-slate-400">歷史閱歷積累</span>
+            <p id="report-knowledge" class="text-emerald-400 font-black text-lg mt-0.5">75 點</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-800/80 border border-white/10">
+            <span class="text-slate-400">收集文物圖鑑</span>
+            <p id="report-collectibles" class="text-purple-400 font-black text-lg mt-0.5">2 件</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 rounded-xl bg-amber-950/40 border border-amber-500/30 mb-6">
+        <p id="report-summary" class="text-xs sm:text-sm text-amber-200 leading-relaxed"></p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button onclick="location.reload()" class="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-base shadow-xl transition-all">
+          開啟下一輪行商輪迴 🔄
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. 背包與圖鑑彈窗 (Inventory Modal - 框維持適中，字體加大) -->
+  <div id="inventory-modal" class="hidden moba-modal-backdrop">
+    <div class="glass-panel max-w-lg w-full p-6 sm:p-8 rounded-3xl border border-white/20 shadow-2xl relative max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between pb-4 border-b border-white/15 shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">🎒</span>
+          <h3 class="font-serif font-black text-2xl text-amber-200">行商背包與時代圖鑑</h3>
+        </div>
+        <button onclick="game.closeModal('inventory-modal')" class="text-slate-400 hover:text-white text-3xl font-bold p-1 leading-none">✕</button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-6">
+        <div>
+          <h4 class="text-base sm:text-lg font-black text-amber-300 uppercase tracking-wider mb-3">已解鎖時代情報秘笈</h4>
+          <div id="inv-clues-list" class="space-y-3"></div>
+        </div>
+
+        <div>
+          <h4 class="text-base sm:text-lg font-black text-purple-300 uppercase tracking-wider mb-3">已收集時代奇物與圖鑑</h4>
+          <div id="inv-relics-list" class="space-y-3"></div>
+        </div>
+      </div>
+
+      <button onclick="game.closeModal('inventory-modal')" class="w-full py-3.5 mt-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-black text-base sm:text-lg shrink-0 transition-colors cursor-pointer">
+        關閉背包
+      </button>
+    </div>
+  </div>
+
+  <!-- 7. 時代背景百科彈窗 (Historical Lore Modal) -->
+  <div id="lore-modal" class="hidden moba-modal-backdrop">
+    <div class="glass-panel max-w-md w-full p-6 sm:p-8 rounded-3xl border border-amber-500/40 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-3 border-b border-white/15 mb-4">
+        <div class="flex items-center gap-2.5">
+          <span class="text-3xl">📜</span>
+          <h3 id="lore-title" class="font-serif font-black text-2xl text-amber-200">時代背景縱覽</h3>
+        </div>
+        <button onclick="game.closeModal('lore-modal')" class="text-slate-400 hover:text-white text-3xl font-bold p-1 leading-none">✕</button>
+      </div>
+      <p id="lore-content" class="text-base sm:text-lg text-slate-100 leading-relaxed mb-6 font-medium"></p>
+      <button onclick="game.closeModal('lore-modal')" class="w-full py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-black text-base sm:text-lg cursor-pointer">
+        返回戰場走位
+      </button>
+    </div>
+  </div>
+
+  <!-- 載入核心模組 -->
+  <script src="js/models.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
