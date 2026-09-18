@@ -145,10 +145,11 @@ html, body {
 }
 
 .quick-item-card {
-  width: 195px;
+  width: 224px;
+  min-width: 224px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: rgba(15, 23, 42, 0.94);
   border: 2px solid rgba(245, 158, 11, 0.55);
   border-radius: 14px;
@@ -156,6 +157,12 @@ html, body {
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+}
+
+.quick-item-card .item-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .quick-item-card:hover {
@@ -168,22 +175,38 @@ html, body {
   transform: scale(0.96);
 }
 
-/* 頂部中央戰局 / 題目指引告示條 */
-/* 頂部中央戰局 / 題目指引告示條 (融入 header，隨螢幕寬度自適應) */
+/* 頂部中央戰局 / 題目指引告示條 (自適應排版，徹底杜絕文字與卡片重疊碰撞) */
 .event-quest-banner {
   flex: 1;
-  max-width: 620px;
-  min-width: 260px;
-  text-align: center;
+  max-width: 560px;
+  min-width: 0;
+  margin: 0 8px;
   pointer-events: auto;
+  overflow: hidden;
 }
 
 .quest-pill {
-  background: linear-gradient(90deg, rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.98) 15%, rgba(15, 23, 42, 0.98) 85%, rgba(15, 23, 42, 0.85));
-  border-top: 2px solid rgba(245, 158, 11, 0.7);
-  border-bottom: 2px solid rgba(245, 158, 11, 0.7);
-  padding: 6px 14px;
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.98) 15%, rgba(15, 23, 42, 0.98) 85%, rgba(15, 23, 42, 0.94));
+  border: 2px solid rgba(245, 158, 11, 0.75);
+  padding: 5px 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+  overflow: hidden;
+  max-width: 100%;
+  border-radius: 9999px;
+}
+
+@media (max-width: 900px) {
+  .moba-header {
+    padding: 6px 10px 6px 148px;
+    gap: 8px;
+  }
+  .event-quest-banner {
+    max-width: 420px;
+    margin: 0 4px;
+  }
+  .quest-pill {
+    padding: 4px 10px;
+  }
 }
 
 /* MOBA 首殺！高光橫幅特效 (如截圖中央 首殺！) */
@@ -851,6 +874,131 @@ html, body {
   font-weight: 900 !important;
   letter-spacing: normal !important;
 }
+
+/* ==============================================================================
+ * 臺灣歷史長河 · 年代與多視角角色選擇專屬樣式 (Era & Perspective System)
+ * ============================================================================== */
+
+/* 頂部 7 大時代橫向滑動軸美化 */
+#era-buttons-container {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(245, 158, 11, 0.5) rgba(15, 23, 42, 0.7);
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+#era-buttons-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+#era-buttons-container::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 9999px;
+}
+
+#era-buttons-container::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.4);
+  border-radius: 9999px;
+}
+
+#era-buttons-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.75);
+}
+
+.era-step-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  flex: 0 0 auto;
+  min-width: 132px;
+  text-align: center;
+}
+
+.era-step-btn:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(245, 158, 11, 0.6);
+  transform: translateY(-2px);
+}
+
+.era-step-btn.active {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(180, 83, 9, 0.35));
+  border-color: #f59e0b;
+  color: #fef08a;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
+}
+
+.perspective-card {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(10, 16, 30, 0.96));
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 13px;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.perspective-card:hover {
+  border-color: #f59e0b;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(245, 158, 11, 0.2);
+  transform: translateY(-3px);
+}
+
+.perspective-card.selected {
+  border-color: #22c55e;
+  box-shadow: 0 0 25px rgba(34, 197, 94, 0.4);
+  background: linear-gradient(135deg, rgba(20, 83, 45, 0.2), rgba(15, 23, 42, 0.95));
+}
+
+.perspective-card.completed {
+  border-color: rgba(34, 197, 94, 0.6);
+}
+
+.perspective-card.locked {
+  opacity: 0.65;
+  filter: grayscale(0.5);
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.era-step-btn.locked {
+  opacity: 0.6;
+  filter: grayscale(0.6);
+  border-style: dashed;
+}
+
+.era-step-btn.completed {
+  border-color: rgba(34, 197, 94, 0.7);
+}
+
+.role-badge-bureaucrat {
+  background: rgba(168, 85, 247, 0.25);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.6);
+}
+
+.role-badge-civilian {
+  background: rgba(14, 165, 233, 0.25);
+  color: #7dd3fc;
+  border: 1px solid rgba(14, 165, 233, 0.6);
+}
+
+.role-badge-pioneer {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fde047;
+  border: 1px solid rgba(245, 158, 11, 0.6);
+}
+
+
 
 
 

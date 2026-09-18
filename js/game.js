@@ -114,10 +114,12 @@ class GameController {
     this.viewWidth = window.innerWidth;
     this.viewHeight = window.innerHeight;
 
-    // 地圖與世界邊界
-    this.worldWidth = 1400;
+    // 地圖與世界邊界 (擴展為 2600 寬闊遊樂場大地圖，連結東西時空渡口)
+    this.worldWidth = 2600;
     this.worldHeight = 1000;
     this.camera = { x: 0, y: 0 };
+    this.isTransitioningEra = false;
+    this._lastBarrierWarning = 0;
 
     // 英雄角色物件
     this.hero = {
@@ -168,6 +170,222 @@ class GameController {
     // 遊戲運行時間
     this.gameStartTime = Date.now();
     this.ambientLightTick = 0;
+
+    // 玩家主要本體身份 (主要身份：名為林晨恩，貫穿全場、跨時空永久成長，通關越來越強)
+    this.playerMaster = {
+      name: '林晨恩',
+      masterTitle: '時空歷史行者',
+      totalReputation: 20,
+      totalKnowledge: 30,
+      masterTierLevel: 1,
+      masterRelics: ['relic_starter_bamboo_basket'],
+      completedEras: [],
+      discoveredLandmarks: []
+    };
+  }
+
+  // 跨時代本尊數值同步與位階晉升
+  syncMasterProgress(repDelta = 0, knowDelta = 0) {
+    if (!this.playerMaster) return;
+    this.playerMaster.totalReputation += repDelta;
+    this.playerMaster.totalKnowledge += knowDelta;
+    const totalPoints = this.playerMaster.totalReputation + this.playerMaster.totalKnowledge;
+    const tiers = this.models.MASTER_PROGRESSION_TIERS || [];
+    let targetTier = tiers[0];
+    for (const t of tiers) {
+      if (totalPoints >= t.minPoints) {
+        targetTier = t;
+      }
+    }
+    if (targetTier && targetTier.level > this.playerMaster.masterTierLevel) {
+      this.playerMaster.masterTierLevel = targetTier.level;
+      if (window.soundFx) window.soundFx.playLevelUp();
+      this.coinVFX.burst(window.innerWidth / 2, window.innerHeight / 2, 60);
+      this.showToast(`👑 本尊晉升！時空位階升至【${targetTier.name}】！`);
+      this.addFloatingText(this.hero.x, this.hero.y - 70, `👑 晉升！${targetTier.name}`, '#f59e0b', 24);
+      this.saveMasterProfile();
+    } else {
+      this.saveMasterProfile();
+    }
+  }
+
+  // 永久儲存歷史行者檔案至 localStorage
+  saveMasterProfile() {
+    if (!this.playerMaster) return;
+    try {
+      localStorage.setItem('taiwan_rpg_master_profile', JSON.stringify(this.playerMaster));
+    } catch (e) {
+      console.warn('無法儲存歷史行者本尊檔案至 localStorage:', e);
+    }
+  }
+
+  // 從 localStorage 還原歷史行者檔案
+  loadMasterProfile() {
+    try {
+      const saved = localStorage.getItem('taiwan_rpg_master_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('讀取歷史行者本尊檔案失敗:', e);
+    }
+    return null;
+  }
+
+  // 永久儲存當前正在進行的時空角色活躍階段 (讓角色進度延續，重新整理不歸零)
+  saveActiveSession() {
+    if (!this.state || !this.currentEra || !this.currentPerspective) return;
+    try {
+      const sessionData = {
+        eraId: this.state.eraId,
+        identityId: this.state.identityId,
+        silver: this.state.silver,
+        reputation: this.state.reputation,
+        knowledge: this.state.knowledge,
+        tierLevel: this.state.tierLevel,
+        unlockedClues: this.state.unlockedClues || [],
+        inventoryCollectibles: this.state.inventoryCollectibles || [],
+        currentNodeId: this.state.currentNodeId,
+        choiceHistory: this.state.choiceHistory || [],
+        historicalDecisionsCount: this.state.historicalDecisionsCount || 0,
+        heroX: (this.hero && typeof this.hero.x === 'number') ? Math.round(this.hero.x) : 700,
+        heroY: (this.hero && typeof this.hero.y === 'number') ? Math.round(this.hero.y) : 420,
+        savedAt: Date.now()
+      };
+      // 1. 儲存當前活躍 session
+      localStorage.setItem('taiwan_rpg_active_session', JSON.stringify(sessionData));
+
+      // 2. 同步記錄在多角色階段字典中，切換不同角色也能保留進度
+      let allSessions = {};
+      try {
+        const raw = localStorage.getItem('taiwan_rpg_saved_sessions');
+        if (raw) allSessions = JSON.parse(raw) || {};
+      } catch (e) {}
+      allSessions[this.state.identityId] = sessionData;
+      localStorage.setItem('taiwan_rpg_saved_sessions', JSON.stringify(allSessions));
+    } catch (e) {
+      console.warn('無法儲存即時角色階段至 localStorage:', e);
+    }
+  }
+
+  // 從 localStorage 還原當前時空角色的活躍進度
+  loadActiveSession(eraId = null, identityId = null) {
+    try {
+      // 若指定了特定人物，優先讀取該人物的專案紀錄
+      if (identityId) {
+        const raw = localStorage.getItem('taiwan_rpg_saved_sessions');
+        if (raw) {
+          const allSessions = JSON.parse(raw);
+          if (allSessions && allSessions[identityId]) {
+            return allSessions[identityId];
+          }
+        }
+      }
+      // 否則讀取全局最新活躍階段
+      const saved = localStorage.getItem('taiwan_rpg_active_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && parsed.eraId && parsed.identityId) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('讀取即時角色進度失敗:', e);
+    }
+    return null;
+  }
+
+  // 清除活躍階段 (例如重溫歷史新開局時)
+  clearActiveSession(identityId = null) {
+    try {
+      if (identityId) {
+        const raw = localStorage.getItem('taiwan_rpg_saved_sessions');
+        if (raw) {
+          const allSessions = JSON.parse(raw) || {};
+          delete allSessions[identityId];
+          localStorage.setItem('taiwan_rpg_saved_sessions', JSON.stringify(allSessions));
+        }
+      }
+      localStorage.removeItem('taiwan_rpg_active_session');
+    } catch (e) {
+      console.warn('清除即時遊戲階段失敗:', e);
+    }
+  }
+
+  // 開啟自訂行者本尊姓名彈窗
+  promptRenameMaster() {
+    if (window.soundFx) window.soundFx.playClick();
+    const modal = document.getElementById('rename-modal');
+    const input = document.getElementById('input-master-name');
+    if (input && this.playerMaster) {
+      input.value = this.playerMaster.name || '林晨恩';
+    }
+    if (modal) {
+      modal.classList.remove('hidden');
+      if (input) setTimeout(() => input.focus(), 150);
+    }
+  }
+
+  // 確認自訂行者本尊姓名
+  confirmRenameMaster() {
+    const input = document.getElementById('input-master-name');
+    if (!input) return;
+    const newName = input.value.trim();
+    if (!newName) {
+      this.showToast('⚠️ 請輸入有效的歷史行者姓名！', 2500);
+      return;
+    }
+    if (this.playerMaster) {
+      this.playerMaster.name = newName;
+      this.saveMasterProfile();
+    }
+    this.closeModal('rename-modal');
+    if (window.soundFx) window.soundFx.playLevelUp();
+    this.showToast(`🎉 歷史行者本尊姓名已自訂為【${newName}】！將永久貫穿七大時代！`, 3500);
+    this.renderHUD();
+    this.showIdentityModal();
+
+    // 更新戰報與其他 DOM 顯示
+    const reportSub = document.getElementById('report-master-sub');
+    if (reportSub && this.currentEra) {
+      reportSub.innerText = `本尊行者：${this.playerMaster.name} ｜ 結算年代：${this.currentEra.year}`;
+    }
+  }
+
+  // 地標初次造訪見聞 (降低情報與閱歷獲取門檻，輕鬆獲得及時反饋)
+  checkLandmarkDiscovery(loc) {
+    if (!loc || loc.id === 'loc_player_home' || loc.id === 'loc_smuggler') return;
+    if (!this.playerMaster.discoveredLandmarks) this.playerMaster.discoveredLandmarks = [];
+    const discoveryKey = `${this.currentEraId}_${loc.id}`;
+    if (!this.playerMaster.discoveredLandmarks.includes(discoveryKey)) {
+      this.playerMaster.discoveredLandmarks.push(discoveryKey);
+
+      let clueToAward = null;
+      if (this.currentEraId === 'era_1869_open_port') {
+        if (loc.id === 'loc_tea_firm') clueToAward = 'clue_western_firms';
+        else if (loc.id === 'loc_customs') clueToAward = 'clue_customs_tax';
+        else if (loc.id === 'loc_sugar_guild') clueToAward = 'clue_fujian_guild';
+        else if (loc.id === 'loc_dock') clueToAward = 'clue_dock_trade';
+      } else if (this.currentEraId === 'era_1642_voc') {
+        clueToAward = 'clue_voc_deer';
+      } else if (this.currentEraId === 'era_1920_modern') {
+        if (loc.id === 'loc_tea_firm') clueToAward = 'clue_1920_petition';
+        else if (loc.id === 'loc_dock') clueToAward = 'clue_railway_trade';
+      }
+
+      if (clueToAward && !this.state.unlockedClues.includes(clueToAward)) {
+        this.rewardClue(clueToAward);
+      } else {
+        this.syncMasterProgress(10, 15);
+        this.state.knowledge += 15;
+        this.renderHUD();
+      }
+      this.showToast(`🔍 探索見聞：初次造訪【${loc.name}】！獲得史學見聞！`);
+      this.addFloatingText(this.hero.x, this.hero.y - 50, '🔍 探索見聞 +15 閱歷！', '#38bdf8', 20);
+    }
   }
 
   init() {
@@ -189,95 +407,110 @@ class GameController {
     // 啟動主渲染迴圈
     requestAnimationFrame((t) => this.gameLoop(t));
 
-    // 每秒更新戰局時間
-    setInterval(() => this.updateGameTimer(), 1000);
+    // 監聽頁面即將卸載或重新整理，確保最新狀態毫秒級存檔
+    window.addEventListener('beforeunload', () => {
+      this.saveActiveSession();
+      this.saveMasterProfile();
+    });
+
+    // 首次進入遊戲，直接進入當前時代歷練，顯示歡迎導引 Toast
+    setTimeout(() => {
+      this.showToast(`📜 歷史時空啟程：【${this.currentEra ? this.currentEra.year : ''} ${this.currentEra ? this.currentEra.title : ''}】！扮演【${this.state.identityName}】展開臺灣歷史情境演繹！`, 4500);
+    }, 450);
   }
 
   initEnvironmentAndNPCs() {
-    // 1. 初始化主角清代長辮物理骨節 (6 節鏈狀物理)
+    // 1. 初始化主角清代長辮物理骨節 (僅在清領時期有長辮)
     this.hero.queueJoints = [];
-    for (let i = 0; i < 6; i++) {
-      this.hero.queueJoints.push({ x: this.hero.x, y: this.hero.y + i * 5 });
+    if (this.currentEraId === 'era_04_early_qing' || this.currentEraId === 'era_05_late_qing' || this.currentEraId === 'era_1869_open_port') {
+      for (let i = 0; i < 6; i++) {
+        this.hero.queueJoints.push({ x: this.hero.x, y: this.hero.y + i * 5 });
+      }
     }
 
-    // 2. 時代市井 NPC 群像 (合理安全間距，杜絕字體與人物重疊)
-    this.npcs = [
-      {
-        id: 'npc_coolie',
-        name: '挑茶苦力 · 阿福',
-        role: '碼頭挑夫',
-        x: 340,
-        y: 420,
-        baseX: 340,
-        baseY: 420,
-        type: 'coolie',
-        facing: 1,
-        talk: '深坑的烏龍茶剛送到！得趕緊挑去寶順洋行秤重裝箱！'
-      },
-      {
-        id: 'npc_dodd',
-        name: '約翰·陶德 (Dodd)',
-        role: '洋商創始人',
-        x: 825,
-        y: 175,
-        baseX: 825,
-        baseY: 175,
-        type: 'westerner',
-        facing: -1,
-        talk: 'Formosa Oolong tea will conquer New York and London!'
-      },
-      {
-        id: 'npc_comprador',
-        name: '買辦 · 李春生',
-        role: '茶業買辦',
-        x: 615,
-        y: 175,
-        baseX: 615,
-        baseY: 175,
-        type: 'scholar',
-        facing: 1,
-        talk: '承恩，開港乃百年難遇之良機，與洋行聯手方能將臺灣茶推向海外！'
-      },
-      {
-        id: 'npc_apprentice',
-        name: '行郊學徒 · 阿木',
-        role: '糖郊夥計',
-        x: 265,
-        y: 175,
-        baseX: 265,
-        baseY: 175,
-        type: 'apprentice',
-        facing: -1,
-        talk: '掌櫃說過，近來兩岸商路風浪大，郊商銀錢吃緊，還是守成穩健好。'
-      },
-      {
-        id: 'npc_guard',
-        name: '正關巡勇 · 杜把總',
-        role: '淡水正關巡防',
-        x: 645,
-        y: 410,
-        baseX: 645,
-        baseY: 410,
-        type: 'guard',
-        facing: -1,
-        talk: '海關正嚴查無稅私運！膽敢闖入西南私渡口，定依新關章程究辦！'
-      },
-      {
-        id: 'npc_boatman',
-        name: '渡船船伕 · 林老漢',
-        role: '淡水河擺渡',
-        x: 490,
-        y: 530,
-        baseX: 490,
-        baseY: 530,
-        type: 'boatman',
-        facing: 1,
-        talk: '潮水正旺，來往艋舺與滬尾的行商舢舨隨時可渡！'
-      }
-    ];
+    // 2. 時代市井 NPC 群像 (分佈於寬敞大道，動態載入對應時代專屬群像)
+    if (this.models.ERA_NPCS && this.models.ERA_NPCS[this.currentEraId]) {
+      this.npcs = JSON.parse(JSON.stringify(this.models.ERA_NPCS[this.currentEraId]));
+    } else {
+      this.npcs = [
+        {
+          id: 'npc_coolie',
+          name: '挑茶苦力 · 阿福',
+          role: '碼頭挑夫',
+          x: 540,
+          y: 680,
+          baseX: 540,
+          baseY: 680,
+          type: 'coolie',
+          facing: 1,
+          talk: '深坑的烏龍茶剛送到！得趕緊挑去寶順洋行秤重裝箱！'
+        },
+        {
+          id: 'npc_dodd',
+          name: '約翰·陶德 (Dodd)',
+          role: '洋商創始人',
+          x: 980,
+          y: 220,
+          baseX: 980,
+          baseY: 220,
+          type: 'westerner',
+          facing: -1,
+          talk: 'Formosa Oolong tea will conquer New York and London!'
+        },
+        {
+          id: 'npc_comprador',
+          name: '買辦 · 李春生',
+          role: '茶業買辦',
+          x: 820,
+          y: 360,
+          baseX: 820,
+          baseY: 360,
+          type: 'scholar',
+          facing: 1,
+          talk: '承恩，開港乃百年難遇之良機，與洋行聯手方能將臺灣茶推向海外！'
+        },
+        {
+          id: 'npc_apprentice',
+          name: '行郊學徒 · 阿木',
+          role: '糖郊夥計',
+          x: 380,
+          y: 220,
+          baseX: 380,
+          baseY: 220,
+          type: 'apprentice',
+          facing: -1,
+          talk: '掌櫃說過，近來兩岸商路風浪大，郊商銀錢吃緊，還是守成穩健好。'
+        },
+        {
+          id: 'npc_guard',
+          name: '正關巡勇 · 杜把總',
+          role: '淡水正關巡防',
+          x: 980,
+          y: 580,
+          baseX: 980,
+          baseY: 580,
+          type: 'guard',
+          facing: -1,
+          talk: '海關正嚴查無稅私運！膽敢闖入西南私渡口，定依新關章程究辦！'
+        },
+        {
+          id: 'npc_boatman',
+          name: '渡船船伕 · 林老漢',
+          role: '淡水河擺渡',
+          x: 820,
+          y: 750,
+          baseX: 820,
+          baseY: 750,
+          type: 'boatman',
+          facing: 1,
+          talk: '潮水正旺，來往艋舺與滬尾的行商舢舨隨時可渡！'
+        }
+      ];
+    }
 
-    // 3. 環境氛圍飄浮粒子 (茶葉微粒、燈籠光星、水霧)
+    // 3. 環境氛圍飄浮粒子 (史前為玉光石英星火，清代為茶葉微粒與燈星)
     this.ambientParticles = [];
+    const isPrehistoric = this.currentEraId === 'era_01_prehistory';
     for (let i = 0; i < 45; i++) {
       this.ambientParticles.push({
         x: Math.random() * this.worldWidth,
@@ -288,7 +521,7 @@ class GameController {
         rot: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() - 0.5) * 0.05,
         alpha: Math.random() * 0.5 + 0.2,
-        type: Math.random() < 0.65 ? 'tealeaf' : 'spark'
+        type: isPrehistoric ? (Math.random() < 0.6 ? 'jadespark' : 'spark') : (Math.random() < 0.65 ? 'tealeaf' : 'spark')
       });
     }
 
@@ -328,30 +561,203 @@ class GameController {
     }
   }
 
-  resetGame() {
-    const defaultIdentity = this.models.GAME_IDENTITIES[0];
-    this.state = {
-      identityId: defaultIdentity.id,
-      identityName: defaultIdentity.name,
-      identityTitle: defaultIdentity.title,
-      silver: defaultIdentity.initialSilver,
-      reputation: defaultIdentity.initialReputation,
-      knowledge: defaultIdentity.initialKnowledge,
-      tierLevel: 1,
-      homeLevel: 1,
-      currentOutfit: 'outfit_peasant',
-      unlockedOutfits: ['outfit_peasant'],
-      accumulatedRent: 0,
-      rentTimer: 0,
-      unlockedClues: [],
-      inventoryCollectibles: [],
-      currentNodeId: 'node_open_market',
-      choiceHistory: [],
-      historicalDecisionsCount: 0
-    };
-    // 英雄生成於中央開市廣場
-    this.hero.x = 490;
-    this.hero.y = 260;
+  resetGame(eraId = null, identityId = null, isFreshStart = false, spawnPosition = null) {
+    const saved = this.loadMasterProfile();
+
+    // 確保本尊玩家資料存在 (跨時代累積，優先從 localStorage 還原)
+    if (!this.playerMaster) {
+      this.playerMaster = {
+        name: (saved && saved.name) || '林晨恩',
+        masterTitle: (saved && saved.masterTitle) || '時空歷史行者',
+        totalReputation: (saved && saved.totalReputation !== undefined) ? saved.totalReputation : 20,
+        totalKnowledge: (saved && saved.totalKnowledge !== undefined) ? saved.totalKnowledge : 30,
+        masterTierLevel: (saved && saved.masterTierLevel) || 1,
+        masterRelics: (saved && Array.isArray(saved.masterRelics)) ? saved.masterRelics : ['relic_starter_bamboo_basket'],
+        completedEras: (saved && Array.isArray(saved.completedEras)) ? saved.completedEras : [],
+        completedPerspectives: (saved && Array.isArray(saved.completedPerspectives)) ? saved.completedPerspectives : [],
+        unlockedEras: (saved && Array.isArray(saved.unlockedEras) && saved.unlockedEras.length > 0) ? saved.unlockedEras : ['era_01_prehistory'],
+        lastActiveEraId: (saved && saved.lastActiveEraId) || 'era_01_prehistory',
+        lastActivePerspectiveId: (saved && saved.lastActivePerspectiveId) || 'changbin_hunter',
+        homeLevel: (saved && saved.homeLevel) || 1,
+        currentOutfit: (saved && saved.currentOutfit) || 'outfit_peasant',
+        unlockedOutfits: (saved && Array.isArray(saved.unlockedOutfits)) ? saved.unlockedOutfits : ['outfit_peasant'],
+        accumulatedRent: (saved && saved.accumulatedRent) || 0,
+        rentTimer: (saved && saved.rentTimer) || 0,
+        discoveredLandmarks: (saved && Array.isArray(saved.discoveredLandmarks)) ? saved.discoveredLandmarks : []
+      };
+    } else {
+      if (!this.playerMaster.masterRelics.includes('relic_starter_bamboo_basket')) {
+        this.playerMaster.masterRelics.push('relic_starter_bamboo_basket');
+      }
+      this.playerMaster.homeLevel = this.playerMaster.homeLevel || 1;
+      this.playerMaster.currentOutfit = this.playerMaster.currentOutfit || 'outfit_peasant';
+      this.playerMaster.unlockedOutfits = this.playerMaster.unlockedOutfits || ['outfit_peasant'];
+      this.playerMaster.accumulatedRent = this.playerMaster.accumulatedRent || 0;
+      this.playerMaster.rentTimer = this.playerMaster.rentTimer || 0;
+      this.playerMaster.completedEras = this.playerMaster.completedEras || [];
+      this.playerMaster.completedPerspectives = this.playerMaster.completedPerspectives || [];
+      this.playerMaster.unlockedEras = this.playerMaster.unlockedEras || ['era_01_prehistory'];
+    }
+
+    const savedSession = isFreshStart ? null : this.loadActiveSession(eraId, identityId);
+
+    // 時代篇章驗證：優先讀取存檔中的活躍時代
+    let candidateEraId = eraId || (savedSession && savedSession.eraId) || (saved && saved.lastActiveEraId) || 'era_01_prehistory';
+    let eraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === candidateEraId);
+    if (eraIdx === -1 || !this.isEraUnlocked(eraIdx)) {
+      // 僅在完全找不到時代時回退第 1 章
+      candidateEraId = 'era_01_prehistory';
+      eraIdx = 0;
+    }
+
+    const era = this.models.HISTORICAL_ERAS[eraIdx];
+    this.currentEraId = era.id;
+    this.currentEra = era;
+    this.models.MAP_LOCATIONS = this.models.ERA_MAP_LOCATIONS[era.id] || this.models.ERA_MAP_LOCATIONS.era_01_prehistory;
+
+    // 人物視角驗證：優先精準延續最後遊玩角色，絕不在重新整理時退回第 1 關
+    let candidateIdentityId = identityId;
+    if (!candidateIdentityId && savedSession && savedSession.eraId === era.id && savedSession.identityId) {
+      candidateIdentityId = savedSession.identityId;
+    } else if (!candidateIdentityId && saved && saved.lastActiveEraId === era.id && saved.lastActivePerspectiveId) {
+      candidateIdentityId = saved.lastActivePerspectiveId;
+    } else if (!candidateIdentityId && era.perspectives && era.perspectives.length > 0) {
+      candidateIdentityId = era.defaultIdentityId || era.perspectives[0].id;
+    }
+
+    let pIndex = era.perspectives.findIndex(p => p.id === candidateIdentityId);
+    if (pIndex === -1) {
+      pIndex = 0;
+    } else if (!this.isPerspectiveUnlocked(era, pIndex)) {
+      // 若為存檔明確記載的當前角色，直接允許載入
+      const isRecordedActive = (savedSession && savedSession.identityId === candidateIdentityId) ||
+                               (saved && saved.lastActivePerspectiveId === candidateIdentityId);
+      if (!isRecordedActive) {
+        pIndex = 0;
+      }
+    }
+
+    const perspective = era.perspectives[pIndex];
+    this.currentPerspective = perspective;
+
+    // 同步本尊檔案最後活躍記錄，並即刻存檔矯正舊資料
+    this.playerMaster.lastActiveEraId = this.currentEraId;
+    this.playerMaster.lastActivePerspectiveId = this.currentPerspective.id;
+    this.saveMasterProfile();
+
+    // 時代初始情報
+    const startingClues = [];
+    if (perspective.startingClueId) {
+      startingClues.push(perspective.startingClueId);
+    } else if (era.id === 'era_02_international' || era.id === 'era_1642_voc') {
+      startingClues.push('clue_voc_deer');
+    } else if (era.id === 'era_05_late_qing' || era.id === 'era_1869_open_port') {
+      startingClues.push('clue_dadaocheng_tea');
+    } else if (era.id === 'era_06_japanese_rule' || era.id === 'era_1920_modern') {
+      startingClues.push('clue_clinical_notes');
+    } else {
+      startingClues.push('clue_changbin_flaked_stone');
+    }
+
+    // 檢查是否有即時遊玩進度可供延續 (同一時代與人物，且非強制重置)
+    const canRestore = !isFreshStart &&
+                       savedSession &&
+                       savedSession.eraId === era.id &&
+                       savedSession.identityId === perspective.id;
+
+    if (canRestore) {
+      // ✅ 完美延續角色進度：重新整理絕不歸零！
+      this.state = {
+        eraId: era.id,
+        identityId: perspective.id,
+        identityName: perspective.name,
+        identityTitle: perspective.title,
+        roleType: perspective.roleType,
+        roleTypeBadge: perspective.roleTypeBadge,
+        perspectiveFocus: perspective.perspectiveFocus,
+        missionObjective: perspective.missionObjective,
+        avatar: perspective.avatar,
+        silver: (typeof savedSession.silver === 'number' && !isNaN(savedSession.silver)) ? savedSession.silver : perspective.initialSilver,
+        reputation: (typeof savedSession.reputation === 'number' && !isNaN(savedSession.reputation)) ? savedSession.reputation : perspective.initialReputation,
+        knowledge: (typeof savedSession.knowledge === 'number' && !isNaN(savedSession.knowledge)) ? savedSession.knowledge : perspective.initialKnowledge,
+        tierLevel: savedSession.tierLevel || 1,
+        homeLevel: this.playerMaster.homeLevel,
+        currentOutfit: this.playerMaster.currentOutfit,
+        unlockedOutfits: [...this.playerMaster.unlockedOutfits],
+        accumulatedRent: this.playerMaster.accumulatedRent,
+        rentTimer: this.playerMaster.rentTimer,
+        unlockedClues: (Array.isArray(savedSession.unlockedClues) && savedSession.unlockedClues.length > 0) ? [...savedSession.unlockedClues] : startingClues,
+        inventoryCollectibles: (Array.isArray(savedSession.inventoryCollectibles) && savedSession.inventoryCollectibles.length > 0) ? [...savedSession.inventoryCollectibles] : [...this.playerMaster.masterRelics],
+        currentNodeId: (savedSession.currentNodeId && this.models.EVENT_NODES[savedSession.currentNodeId]) ? savedSession.currentNodeId : perspective.firstNodeId,
+        choiceHistory: Array.isArray(savedSession.choiceHistory) ? savedSession.choiceHistory : [],
+        historicalDecisionsCount: savedSession.historicalDecisionsCount || 0
+      };
+      if (spawnPosition === 'west') {
+        this.hero.x = 280;
+        this.hero.y = 420;
+      } else if (spawnPosition === 'east') {
+        this.hero.x = 2200;
+        this.hero.y = 420;
+      } else {
+        // 每次換角色、下一關或載入新關卡，一律回到起始點 (中間 700, 420)，絕不預先移動到目標建築
+        this.hero.x = 700;
+        this.hero.y = 420;
+      }
+    } else {
+      this.state = {
+        eraId: era.id,
+        identityId: perspective.id,
+        identityName: perspective.name,
+        identityTitle: perspective.title,
+        roleType: perspective.roleType,
+        roleTypeBadge: perspective.roleTypeBadge,
+        perspectiveFocus: perspective.perspectiveFocus,
+        missionObjective: perspective.missionObjective,
+        avatar: perspective.avatar,
+        silver: perspective.initialSilver,
+        reputation: perspective.initialReputation,
+        knowledge: perspective.initialKnowledge,
+        tierLevel: 1,
+        homeLevel: this.playerMaster.homeLevel,
+        currentOutfit: this.playerMaster.currentOutfit,
+        unlockedOutfits: [...this.playerMaster.unlockedOutfits],
+        accumulatedRent: this.playerMaster.accumulatedRent,
+        rentTimer: this.playerMaster.rentTimer,
+        unlockedClues: startingClues,
+        inventoryCollectibles: [...this.playerMaster.masterRelics],
+        currentNodeId: perspective.firstNodeId,
+        choiceHistory: [],
+        historicalDecisionsCount: 0
+      };
+      if (spawnPosition === 'west') {
+        this.hero.x = 280;
+        this.hero.y = 420;
+      } else if (spawnPosition === 'east') {
+        this.hero.x = 2200;
+        this.hero.y = 420;
+      } else {
+        // 每次換角色/下一關起始點統一設為中間起始點 (700, 420)
+        this.hero.x = 700;
+        this.hero.y = 420;
+      }
+      this.saveActiveSession();
+    }
+
+    // 英雄狀態與地圖環境初始化 (確保回到中央起始點，無任何殘留尋路或速度)
+    this.hero.vx = 0;
+    this.hero.vy = 0;
+    this.hero.isMoving = false;
+    this.hero.navTarget = null;
+    this.currentContactZone = null;
+    this.hideZonePromptBubble();
+
+    // 相機平滑對齊中央起始點 (700, 420)
+    const vW = this.viewWidth || window.innerWidth;
+    const vH = this.viewHeight || window.innerHeight;
+    this.camera.x = 700 - vW / 2;
+    this.camera.y = 420 - vH / 2;
+
+    this.initEnvironmentAndNPCs();
   }
 
   getCurrentTier() {
@@ -411,17 +817,22 @@ class GameController {
       this.activeRadarBeam -= 1 / 60;
     }
 
-    // 家宅商號店租分紅累積 (每 25 秒產出一次)
-    if (this.state && this.state.homeLevel > 1) {
+    // 家宅商號店租分紅累積 (每 25 秒產出一次，歸屬本尊林晨恩永久基業)
+    const currentHomeLevel = (this.playerMaster && this.playerMaster.homeLevel) || (this.state && this.state.homeLevel) || 1;
+    if (this.state && currentHomeLevel > 1) {
       this.state.rentTimer = (this.state.rentTimer || 0) + 1 / 60;
+      if (this.playerMaster) this.playerMaster.rentTimer = this.state.rentTimer;
       if (this.state.rentTimer >= 25) {
         this.state.rentTimer = 0;
-        const currentTier = this.models.HOME_TIERS[this.state.homeLevel - 1];
+        if (this.playerMaster) this.playerMaster.rentTimer = 0;
+        const currentTier = this.models.HOME_TIERS[currentHomeLevel - 1];
         if (currentTier && currentTier.rentPerInterval > 0) {
-          this.state.accumulatedRent = (this.state.accumulatedRent || 0) + currentTier.rentPerInterval;
-          this.showToast(`💰 承恩宅邸鋪面產生了 ${currentTier.rentPerInterval} 兩店租分紅，可隨時回家領取！`);
+          const newRent = ((this.playerMaster && this.playerMaster.accumulatedRent) || this.state.accumulatedRent || 0) + currentTier.rentPerInterval;
+          if (this.playerMaster) this.playerMaster.accumulatedRent = newRent;
+          this.state.accumulatedRent = newRent;
+          this.showToast(`💰 林晨恩家族商邸產生了 ${currentTier.rentPerInterval} 兩店租分紅，可隨時回宅領取！`);
           const rentDisplay = document.getElementById('home-accumulated-rent');
-          if (rentDisplay) rentDisplay.innerText = `${this.state.accumulatedRent} 兩`;
+          if (rentDisplay) rentDisplay.innerText = `${newRent} 兩`;
         }
       }
     }
@@ -430,16 +841,22 @@ class GameController {
     let moveX = 0;
     let moveY = 0;
 
-    // 鍵盤輸入 (WASD / 方向鍵)
-    if (this.keys['KeyW'] || this.keys['ArrowUp']) moveY -= 1;
-    if (this.keys['KeyS'] || this.keys['ArrowDown']) moveY += 1;
-    if (this.keys['KeyA'] || this.keys['ArrowLeft']) moveX -= 1;
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) moveX += 1;
+    // 當任何全螢幕彈窗或戰報卡開啟時，停止地圖移動，防止背景誤走
+    if (this.isAnyModalOpen()) {
+      this.hero.isMoving = false;
+      this.hero.navTarget = null;
+    } else {
+      // 鍵盤輸入 (WASD / 方向鍵)
+      if (this.keys['KeyW'] || this.keys['ArrowUp']) moveY -= 1;
+      if (this.keys['KeyS'] || this.keys['ArrowDown']) moveY += 1;
+      if (this.keys['KeyA'] || this.keys['ArrowLeft']) moveX -= 1;
+      if (this.keys['KeyD'] || this.keys['ArrowRight']) moveX += 1;
 
-    // 虛擬搖桿輸入 (手機觸控/滑鼠拖曳)
-    if (this.joystick.active) {
-      moveX += this.joystick.vectorX;
-      moveY += this.joystick.vectorY;
+      // 虛擬搖桿輸入 (手機觸控/滑鼠拖曳)
+      if (this.joystick.active) {
+        moveX += this.joystick.vectorX;
+        moveY += this.joystick.vectorY;
+      }
     }
 
     // 計算向量長度
@@ -526,6 +943,49 @@ class GameController {
     this.hero.x = Math.max(50, Math.min(this.worldWidth - 50, this.hero.x));
     this.hero.y = Math.max(50, Math.min(this.worldHeight - 50, this.hero.y));
 
+    // 檢查東方時空界線與躍遷判定 (往右走跨越至下一個年代/時空)
+    const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
+    const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
+    const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
+    const isEraCompleted = this.isCurrentEraCompleted();
+
+    if (hasNextEra) {
+      if (!isEraCompleted) {
+        // 🔒 尚未破關：東方邊界 x >= 2260 形成全屏垂直不可穿越的時空封印壁障！完全走不過去！
+        if (this.hero.x >= 2260) {
+          this.hero.x = 2260;
+          this.hero.vx = -2.5;
+          if (this.hero.navTarget && this.hero.navTarget.x > 2250) {
+            this.hero.navTarget = null;
+          }
+          if (!this._lastBarrierWarning || Date.now() - this._lastBarrierWarning > 2500) {
+            this._lastBarrierWarning = Date.now();
+            if (window.soundFx) {
+              if (window.soundFx.playCritical) window.soundFx.playCritical();
+              else window.soundFx.playClick();
+            }
+            const curEraPerspectives = this.currentEra ? this.currentEra.perspectives : [];
+            const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id)).length;
+            this.showToast(`🔒 尚未破關！需先通關當前時代【${this.currentEra.title}】全部角色（目前 ${doneCount}/${curEraPerspectives.length}），方可穿越時空前往下一年代！`, 4000);
+            this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 尚未破關！時空封印壁障無法通行', '#f43f5e', 22);
+          }
+        }
+      } else {
+        // ✨ 已破關：玩家一直往右走，踏入東方時空長河 (x >= 2300) 即可跨越至下一個年代！
+        if (this.hero.x >= 2300) {
+          this.jumpToNextEraSpacetime(nextEra.id);
+        }
+      }
+    }
+
+    // 檢查西方時空回溯渡口 (往回走/向左走至 x <= 200，非第 1 章時可回溯至上一時空)
+    if (curEraIdx > 0) {
+      const prevEra = this.models.HISTORICAL_ERAS[curEraIdx - 1];
+      if (this.hero.x <= 200) {
+        this.jumpToPrevEraSpacetime(prevEra.id);
+      }
+    }
+
     // 殘影衰減
     for (let i = this.hero.ghostTrails.length - 1; i >= 0; i--) {
       this.hero.ghostTrails[i].alpha -= 0.04;
@@ -534,13 +994,23 @@ class GameController {
       }
     }
 
-    // 3. 相機跟隨英雄平滑移動 (以 CSS 視口中心為基準)
+    // 3. 相機跟隨英雄平滑移動 (考慮頂部與左側 HUD 遮擋，適度擴展視野邊界)
     const vW = this.viewWidth || window.innerWidth;
     const vH = this.viewHeight || window.innerHeight;
     const targetCamX = this.hero.x - vW / 2;
     const targetCamY = this.hero.y - vH / 2;
-    this.camera.x += (targetCamX - this.camera.x) * 0.1;
-    this.camera.y += (targetCamY - this.camera.y) * 0.1;
+
+    // 頂部有約 80px 的常駐主資訊欄，左側有約 250px 的側邊欄與情報卡
+    // 允許相機向頂部 (-160) 與向左側 (-240) 延伸，確保走到石屋與左側工坊時建築與標題文字完整清晰可見
+    const minCamX = -240;
+    const minCamY = -160;
+    const maxCamX = Math.max(minCamX, this.worldWidth - vW + 160);
+    const maxCamY = Math.max(minCamY, this.worldHeight - vH + 140);
+
+    const clampedTargetCamX = Math.max(minCamX, Math.min(maxCamX, targetCamX));
+    const clampedTargetCamY = Math.max(minCamY, Math.min(maxCamY, targetCamY));
+    this.camera.x += (clampedTargetCamX - this.camera.x) * 0.1;
+    this.camera.y += (clampedTargetCamY - this.camera.y) * 0.1;
 
     // 4. 更新清代長辮動態物理 (Queue hair physics)
     if (this.hero.queueJoints && this.hero.queueJoints.length > 0) {
@@ -602,11 +1072,28 @@ class GameController {
 
   // 檢測當前位置與選項法陣的接觸
   checkZoneTriggers() {
+    // 當任意全螢幕彈窗、戰報卡或結算介面開啟時，絕對禁止觸發或彈出地面選項氣泡
+    if (this.isAnyModalOpen()) {
+      if (this.currentZoneKey) {
+        this.currentZoneKey = null;
+        this.currentContactZone = null;
+        this.hideZonePromptBubble();
+      }
+      return;
+    }
+
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
-    if (!currentNode) return;
+    if (!currentNode) {
+      if (this.currentZoneKey) {
+        this.currentZoneKey = null;
+        this.currentContactZone = null;
+        this.hideZonePromptBubble();
+      }
+      return;
+    }
 
     let nearestZone = null;
-    let minDistance = 90; // 觸發半徑
+    let minDistance = 38; // 觸發半徑 (精準光圈感應，防止逛街誤觸)
 
     // 檢查自家商邸 (始終可互動：建造/換裝/領租金)
     const homeLoc = this.models.MAP_LOCATIONS.find(l => l.id === 'loc_player_home');
@@ -656,13 +1143,61 @@ class GameController {
       }
     }
 
+    // 檢查東方時空長河躍遷渡口 (Next Era Portal)
+    const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
+    const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
+    const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
+    const isNextUnlocked = hasNextEra && this.isEraUnlocked(curEraIdx + 1);
+
+    if (!nearestZone && hasNextEra) {
+      const portalX = 2320;
+      const portalY = 420;
+      const d = Math.hypot(this.hero.x - portalX, this.hero.y - portalY);
+      if (d < 150) {
+        nearestZone = {
+          isSpacetimePortal: true,
+          nextEra: nextEra,
+          isUnlocked: isNextUnlocked,
+          doorX: portalX,
+          doorY: portalY,
+          distance: d
+        };
+      }
+    }
+
+    // 檢查西方時空回溯門 (Prev Era Portal)
+    if (!nearestZone && curEraIdx > 0) {
+      const prevEra = this.models.HISTORICAL_ERAS[curEraIdx - 1];
+      const portalX = 200;
+      const portalY = 420;
+      const d = Math.hypot(this.hero.x - portalX, this.hero.y - portalY);
+      if (d < 140) {
+        nearestZone = {
+          isPrevSpacetimePortal: true,
+          prevEra: prevEra,
+          doorX: portalX,
+          doorY: portalY,
+          distance: d
+        };
+      }
+    }
+
     // 狀態轉移與懸浮卡更新 (修正：僅在接觸區域改變時更新 DOM，避免每幀重繪導致點擊事件失效)
     if (nearestZone) {
-      const zoneKey = nearestZone.isPlayerHome ? 'home' : (nearestZone.isDockMinigame ? 'dock' : `${nearestZone.location.id}_${nearestZone.optionIndex}`);
+      const zoneKey = nearestZone.isPlayerHome ? 'home' : (
+        nearestZone.isDockMinigame ? 'dock' : (
+          nearestZone.isSpacetimePortal ? 'spacetime_next' : (
+            nearestZone.isPrevSpacetimePortal ? 'spacetime_prev' : `${nearestZone.location ? nearestZone.location.id : 'loc'}_${nearestZone.optionIndex}`
+          )
+        )
+      );
       if (this.currentZoneKey !== zoneKey) {
         this.currentZoneKey = zoneKey;
         this.currentContactZone = nearestZone;
         this.showZonePromptBubble(nearestZone);
+        if (nearestZone.location) {
+          this.checkLandmarkDiscovery(nearestZone.location);
+        }
       }
     } else {
       if (this.currentZoneKey) {
@@ -682,15 +1217,19 @@ class GameController {
     bubble.onclick = (e) => e.stopPropagation();
     bubble.onpointerdown = (e) => e.stopPropagation();
 
+    const currency = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    const homeName = (this.currentEra && this.currentEra.homeName) || '家族宅邸';
+    const workAction = (this.currentEra && this.currentEra.workActionName) || '打工';
+
     if (zone.isPlayerHome) {
       const homeTier = this.models.HOME_TIERS[this.state.homeLevel - 1] || this.models.HOME_TIERS[0];
       document.getElementById('bubble-icon').innerText = '🏡';
-      document.getElementById('bubble-loc-name').innerText = '大稻埕 · 承恩商邸';
+      document.getElementById('bubble-loc-name').innerText = homeName;
       document.getElementById('bubble-subtitle').innerText = `自家產業 · ${homeTier.name}`;
-      document.getElementById('bubble-badge').innerText = '🏡 自家私宅';
-      document.getElementById('bubble-decision-text').innerText = '進入自家商邸：擴建豪宅、更換衣服造型、坐收商號租金！';
-      document.getElementById('bubble-cost').innerText = '0 兩';
-      document.getElementById('bubble-reward').innerText = `${this.state.accumulatedRent || 0} 兩待領`;
+      document.getElementById('bubble-badge').innerText = '🏡 自家居所';
+      document.getElementById('bubble-decision-text').innerText = '進入自家宅邸：擴建居所、更換衣裝、坐收產業分紅！';
+      document.getElementById('bubble-cost').innerText = `0 ${currency}`;
+      document.getElementById('bubble-reward').innerText = `${this.state.accumulatedRent || 0} ${currency}待領`;
       document.getElementById('bubble-crit').innerText = `Lv.${this.state.homeLevel}`;
 
       if (confirmBtn) {
@@ -698,18 +1237,55 @@ class GameController {
         confirmBtn.className = 'flex-1 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-lg sm:text-xl shadow-xl flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer';
       }
     } else if (zone.isDockMinigame) {
-      document.getElementById('bubble-icon').innerText = '⚓';
-      document.getElementById('bubble-loc-name').innerText = '大稻埕碼頭棧房';
-      document.getElementById('bubble-subtitle').innerText = '碼頭理貨 · 現賺銀兩與秘笈';
-      document.getElementById('bubble-badge').innerText = '⚓ 打工賺錢';
-      document.getElementById('bubble-decision-text').innerText = '幫碼頭理貨打工，點選 3 箱商貨，現賺 30 兩並拿行商秘笈！';
-      document.getElementById('bubble-cost').innerText = '0 兩';
-      document.getElementById('bubble-reward').innerText = '30 兩+情報';
+      const dockLoc = this.models.MAP_LOCATIONS.find(l => l.id === 'loc_dock');
+      const locTitle = dockLoc ? dockLoc.name : `${workAction}水岸`;
+      document.getElementById('bubble-icon').innerText = (this.currentEraId === 'era_01_prehistory') ? '🛶' : '⚓';
+      document.getElementById('bubble-loc-name').innerText = locTitle;
+      document.getElementById('bubble-subtitle').innerText = `${workAction} · 現賺${currency}與秘笈`;
+      document.getElementById('bubble-badge').innerText = `💪 ${workAction}`;
+      document.getElementById('bubble-decision-text').innerText = `幫忙整理貨物打工，點選 3 箱物資，現賺 30 ${currency}並拿時代情報！`;
+      document.getElementById('bubble-cost').innerText = `0 ${currency}`;
+      document.getElementById('bubble-reward').innerText = `30 ${currency}+情報`;
       document.getElementById('bubble-crit').innerText = '100%';
 
       if (confirmBtn) {
-        confirmBtn.innerHTML = '<span class="text-xl">⚓</span><span>開始理貨打工（點擊或按空白鍵）</span>';
+        confirmBtn.innerHTML = `<span class="text-xl">${(this.currentEraId === 'era_01_prehistory') ? '🛶' : '⚓'}</span><span>開始${workAction}（點擊或按空白鍵）</span>`;
         confirmBtn.className = 'flex-1 py-4 rounded-2xl bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-white font-black text-lg sm:text-xl shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer';
+      }
+    } else if (zone.isSpacetimePortal) {
+      document.getElementById('bubble-icon').innerText = zone.isUnlocked ? '🌌' : '🔒';
+      document.getElementById('bubble-loc-name').innerText = '時空長河躍遷渡口';
+      document.getElementById('bubble-subtitle').innerText = zone.isUnlocked ? `前往【${zone.nextEra.title}】` : `🔒 前方為【${zone.nextEra.title}】`;
+      document.getElementById('bubble-badge').innerText = zone.isUnlocked ? '✨ 時代已破關' : '🔒 需通關當前時代';
+      document.getElementById('bubble-decision-text').innerText = zone.isUnlocked 
+        ? `時空光幕已啟動！點擊或直接往右踏入傳送陣，即刻穿越至【${zone.nextEra.year} ${zone.nextEra.title}】！` 
+        : `尚未通關當前時代【${this.currentEra.title}】！完成當前時代歷史抉擇破關後，方可跨越此處時空界線！`;
+      document.getElementById('bubble-cost').innerText = `0 ${currency}`;
+      document.getElementById('bubble-reward').innerText = '跨越時空';
+      document.getElementById('bubble-crit').innerText = '100%';
+
+      if (confirmBtn) {
+        if (zone.isUnlocked) {
+          confirmBtn.innerHTML = '<span class="text-xl">🌌</span><span>跨越時空長河（點擊或按空白鍵）</span>';
+          confirmBtn.className = 'flex-1 py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-sky-500 hover:from-purple-500 hover:to-sky-400 text-white font-black text-lg sm:text-xl shadow-xl flex items-center justify-center gap-2 transition-transform active:scale-95 animate-pulse cursor-pointer';
+        } else {
+          confirmBtn.innerHTML = `<span class="text-xl">🔒</span><span>尚未破關（需通關【${this.currentEra.title}】）</span>`;
+          confirmBtn.className = 'flex-1 py-4 rounded-2xl bg-slate-800 text-slate-400 font-bold text-sm sm:text-base shadow flex items-center justify-center gap-2 cursor-not-allowed';
+        }
+      }
+    } else if (zone.isPrevSpacetimePortal) {
+      document.getElementById('bubble-icon').innerText = '🕰️';
+      document.getElementById('bubble-loc-name').innerText = '時空回溯渡口';
+      document.getElementById('bubble-subtitle').innerText = `返回【${zone.prevEra.title}】`;
+      document.getElementById('bubble-badge').innerText = '🕰️ 時空回溯';
+      document.getElementById('bubble-decision-text').innerText = `回到前一個歷史時代【${zone.prevEra.year} ${zone.prevEra.title}】重溫冒險！`;
+      document.getElementById('bubble-cost').innerText = `0 ${currency}`;
+      document.getElementById('bubble-reward').innerText = '回溯歷史';
+      document.getElementById('bubble-crit').innerText = '100%';
+
+      if (confirmBtn) {
+        confirmBtn.innerHTML = '<span class="text-xl">🕰️</span><span>返回前一時代（點擊或按空白鍵）</span>';
+        confirmBtn.className = 'flex-1 py-4 rounded-2xl bg-gradient-to-r from-slate-700 to-amber-700 hover:from-slate-600 hover:to-amber-600 text-amber-200 font-black text-base sm:text-lg shadow flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer';
       }
     } else {
       const opt = zone.option;
@@ -717,19 +1293,40 @@ class GameController {
       document.getElementById('bubble-icon').innerText = loc.icon;
       document.getElementById('bubble-loc-name').innerText = loc.name;
       document.getElementById('bubble-subtitle').innerText = loc.subTitle;
-      document.getElementById('bubble-badge').innerText = opt.badge || '商業決策';
-      document.getElementById('bubble-decision-text').innerText = opt.text;
-      document.getElementById('bubble-cost').innerText = `${opt.baseCost} 兩`;
-      document.getElementById('bubble-reward').innerText = `${opt.baseSilverReward} 兩`;
+      document.getElementById('bubble-badge').innerText = opt.badge || '歷史抉擇';
+      document.getElementById('bubble-decision-text').innerText = opt.text || opt.actionText;
+      const cost = opt.baseCost || 0;
+      const reward = opt.baseSilverReward !== undefined ? opt.baseSilverReward : (opt.baseReward || 0);
+      document.getElementById('bubble-cost').innerText = `${cost} ${currency}`;
+      document.getElementById('bubble-reward').innerText = `${reward} ${currency}`;
       document.getElementById('bubble-crit').innerText = `${Math.round(opt.criticalChance * 100)}%`;
 
       if (confirmBtn) {
-        if (this.state.silver < opt.baseCost) {
-          const shortage = opt.baseCost - this.state.silver;
-          confirmBtn.innerHTML = `<span>⚠️</span><span>本金不足（尚缺 ${shortage} 兩）· 點此自動前往碼頭打工</span>`;
+        if (this.state.silver < cost) {
+          const shortage = cost - this.state.silver;
+          confirmBtn.innerHTML = `<span>⚠️</span><span>資財不足（尚缺 ${shortage} ${currency}）· 點此自動前往${workAction}</span>`;
           confirmBtn.className = 'flex-1 py-4 rounded-2xl bg-gradient-to-r from-amber-700 to-red-700 hover:from-amber-600 hover:to-red-600 text-amber-200 font-black text-base sm:text-lg shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 animate-pulse cursor-pointer';
         } else {
-          confirmBtn.innerHTML = '<span class="text-xl">🤝</span><span>確認商號交涉（點擊或按空白鍵）</span>';
+          let actionIcon = (opt && opt.actionIcon) || '🤝';
+          let actionText = (opt && (opt.buttonText || opt.actionButtonText)) || '確認歷史決策';
+
+          if (!opt.buttonText && !opt.actionButtonText) {
+            if (opt.id === 'opt_guo_strike_oppression' || this.state.identityId === 'guo_huaiyi') {
+              actionIcon = '⚔️';
+              actionText = '反抗荷蘭人';
+            } else if (this.state.roleType === 'bureaucrat' || loc.type === 'choice_voc_gov' || loc.id === 'loc_customs') {
+              actionIcon = '🏛️';
+              actionText = '裁定法規制度';
+            } else if (this.state.roleType === 'pioneer' || loc.type === 'choice_tribal_market') {
+              actionIcon = '🏹';
+              actionText = '議決部族協約';
+            } else if (loc.type === 'choice_culture') {
+              actionIcon = '📢';
+              actionText = '啟動文化宣講';
+            }
+          }
+
+          confirmBtn.innerHTML = `<span class="text-xl">${actionIcon}</span><span>${actionText}（點擊或按空白鍵）</span>`;
           confirmBtn.className = 'flex-1 py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-lg sm:text-xl shadow-xl flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer';
         }
       }
@@ -750,9 +1347,48 @@ class GameController {
     }
 
     bubble.classList.remove('hidden');
-    // 高亮普攻按鍵
+    // 高亮並動態調整普攻按鍵文字與圖標
     const btn = document.getElementById('btn-interact');
-    if (btn) btn.classList.add('pressed');
+    if (btn) {
+      btn.classList.add('pressed');
+      const iconEl = btn.querySelector('.attack-icon');
+      const labelEl = btn.querySelector('.attack-label');
+      if (zone.isPlayerHome) {
+        if (iconEl) iconEl.innerText = '🏡';
+        if (labelEl) labelEl.innerText = '進入宅邸';
+      } else if (zone.isDockMinigame) {
+        if (iconEl) iconEl.innerText = (this.currentEraId === 'era_01_prehistory') ? '🛶' : '⚓';
+        if (labelEl) labelEl.innerText = (this.currentEraId === 'era_01_prehistory') ? '工藝打工' : '理貨打工';
+      } else if (zone.isSpacetimePortal) {
+        if (iconEl) iconEl.innerText = zone.isUnlocked ? '🌌' : '🔒';
+        if (labelEl) labelEl.innerText = zone.isUnlocked ? '跨越時空' : '時空界線';
+      } else if (zone.isPrevSpacetimePortal) {
+        if (iconEl) iconEl.innerText = '🕰️';
+        if (labelEl) labelEl.innerText = '時空回溯';
+      } else {
+        const curOpt = zone.option;
+        const loc = zone.location || {};
+        if (curOpt && (curOpt.buttonText || curOpt.actionButtonText)) {
+          if (iconEl) iconEl.innerText = curOpt.actionIcon || '⚔️';
+          if (labelEl) labelEl.innerText = curOpt.buttonText || curOpt.actionButtonText;
+        } else if (curOpt && (curOpt.id === 'opt_guo_strike_oppression' || this.state.identityId === 'guo_huaiyi')) {
+          if (iconEl) iconEl.innerText = '⚔️';
+          if (labelEl) labelEl.innerText = '反抗荷蘭';
+        } else if (this.state.roleType === 'bureaucrat' || loc.type === 'choice_voc_gov' || loc.id === 'loc_customs') {
+          if (iconEl) iconEl.innerText = '🏛️';
+          if (labelEl) labelEl.innerText = '裁定法規';
+        } else if (this.state.roleType === 'pioneer' || loc.type === 'choice_tribal_market') {
+          if (iconEl) iconEl.innerText = '🏹';
+          if (labelEl) labelEl.innerText = '議決盟約';
+        } else if (loc.type === 'choice_culture') {
+          if (iconEl) iconEl.innerText = '📢';
+          if (labelEl) labelEl.innerText = '文化宣講';
+        } else {
+          if (iconEl) iconEl.innerText = '🤝';
+          if (labelEl) labelEl.innerText = '交涉商號';
+        }
+      }
+    }
   }
 
   hideZonePromptBubble() {
@@ -760,7 +1396,21 @@ class GameController {
     const bubble = document.getElementById('zone-prompt-bubble');
     if (bubble) bubble.classList.add('hidden');
     const btn = document.getElementById('btn-interact');
-    if (btn) btn.classList.remove('pressed');
+    if (btn) {
+      btn.classList.remove('pressed');
+      const iconEl = btn.querySelector('.attack-icon');
+      const labelEl = btn.querySelector('.attack-label');
+      if (this.state.roleType === 'bureaucrat') {
+        if (iconEl) iconEl.innerText = '🏛️';
+        if (labelEl) labelEl.innerText = '政務裁決';
+      } else if (this.state.roleType === 'pioneer') {
+        if (iconEl) iconEl.innerText = '🏹';
+        if (labelEl) labelEl.innerText = '時代先鋒';
+      } else {
+        if (iconEl) iconEl.innerText = '🤝';
+        if (labelEl) labelEl.innerText = '交涉商號';
+      }
+    }
   }
 
   executeCurrentZoneChoice() {
@@ -777,6 +1427,23 @@ class GameController {
       return;
     }
 
+    if (this.currentContactZone.isSpacetimePortal) {
+      const zone = this.currentContactZone;
+      if (zone.isUnlocked) {
+        this.jumpToNextEraSpacetime(zone.nextEra.id);
+      } else {
+        if (window.soundFx) window.soundFx.playClick();
+        this.showToast(`🔒 時代篇章【${zone.nextEra.title}】尚未解鎖！需先通關當前【${this.currentEra.title}】全部角色！`, 3500);
+      }
+      return;
+    }
+
+    if (this.currentContactZone.isPrevSpacetimePortal) {
+      const zone = this.currentContactZone;
+      this.jumpToPrevEraSpacetime(zone.prevEra.id);
+      return;
+    }
+
     const opt = this.currentContactZone.option;
     if (opt && this.state.silver < opt.baseCost) {
       const shortage = opt.baseCost - this.state.silver;
@@ -790,6 +1457,27 @@ class GameController {
   }
 
   handlePrimaryAction() {
+    // 彈窗或戰報卡開啟期間，優先響應彈窗的主確認/關閉操作，絕不誤觸地面選項
+    if (this.isAnyModalOpen()) {
+      const examModal = document.getElementById('exam-review-modal');
+      if (examModal) {
+        const closeBtn = document.getElementById('btn-close-exam-review');
+        if (closeBtn) {
+          closeBtn.click();
+          return;
+        }
+      }
+      const consModal = document.getElementById('consequence-modal');
+      if (consModal && !consModal.classList.contains('hidden')) {
+        const nextBtn = document.getElementById('cons-next-btn');
+        if (nextBtn) {
+          nextBtn.click();
+          return;
+        }
+      }
+      return;
+    }
+
     if (this.currentContactZone) {
       this.executeCurrentZoneChoice();
     } else {
@@ -849,44 +1537,53 @@ class GameController {
 
   // 1. 繪製大地圖地景與時代水文 (Terrain & Historical Atmosphere)
   drawTerrain(ctx) {
-    // 基底土地顏色 (晚清大稻埕老街沉穩青石鋪地)
+    // 基底土地顏色 (擴展覆蓋四方緩衝區，確保相機往上、往左平移時不露黑邊)
     ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, this.worldWidth, this.worldHeight);
+    ctx.fillRect(-800, -600, this.worldWidth + 1600, this.worldHeight + 1200);
 
-    // 鋪設細緻微石磚地紋 (止於淡水河岸線 y: 480)
+    // 鋪設細緻微石磚地紋 (止於淡水河岸線 y: 750)
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.35)';
     ctx.lineWidth = 1;
     const tSize = 48;
-    for (let x = 0; x < this.worldWidth; x += tSize) {
+    for (let x = -600; x < this.worldWidth + 600; x += tSize) {
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, 480);
+      ctx.moveTo(x, -600);
+      ctx.lineTo(x, 750);
       ctx.stroke();
     }
-    for (let y = 0; y < 480; y += tSize) {
+    for (let y = -600; y < 750; y += tSize) {
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(this.worldWidth, y);
+      ctx.moveTo(-600, y);
+      ctx.lineTo(this.worldWidth + 600, y);
       ctx.stroke();
     }
 
-    // 街道沿線八角宮廷石雕風燈 (溫潤暖光輻射光暈)
-    this.drawStreetLanternPost(ctx, 350, 160);
-    this.drawStreetLanternPost(ctx, 620, 160);
-    this.drawStreetLanternPost(ctx, 620, 360);
-    this.drawStreetLanternPost(ctx, 350, 360);
+    // 街道沿線八角宮廷石雕風燈 (溫潤暖光輻射光暈，寬闊分佈)
+    this.drawStreetLanternPost(ctx, 450, 220);
+    this.drawStreetLanternPost(ctx, 950, 220);
+    this.drawStreetLanternPost(ctx, 450, 580);
+    this.drawStreetLanternPost(ctx, 950, 580);
 
-    // 繪製泉州花崗石板大道 (壓艙石鋪砌的主街道)
-    this.drawStonePath(ctx, 485, 260, 485, 460); // 南北大街 (連接碼頭與中央廣場)
-    this.drawStonePath(ctx, 210, 150, 485, 260); // 西北街 (通往泉郊金聯成)
-    this.drawStonePath(ctx, 485, 260, 750, 150); // 東北街 (通往英商寶順洋行)
-    this.drawStonePath(ctx, 485, 260, 750, 370); // 東南街 (通往淡水海關)
-    this.drawDirtPath(ctx, 485, 260, 200, 370);  // 西南暗巷泥徑 (通往𧶄瑯私渡口)
+    // 繪製泉州花崗石板大道 (寬敞大路，南北與東西延伸至各建築門前)
+    this.drawStonePath(ctx, 700, 80, 700, 710); // 南北大街 (貫穿商邸、廣場與碼頭)
+    this.drawStonePath(ctx, 160, 220, 1140, 220); // 北部橫向大道 (貫通東西商郊與洋行)
+    this.drawStonePath(ctx, 260, 220, 700, 420);  // 西北斜向大道 (金聯成通向廣場)
+    this.drawStonePath(ctx, 1140, 220, 700, 420); // 東北斜向大道 (寶順洋行通向廣場)
+    this.drawStonePath(ctx, 700, 420, 1140, 580); // 東南斜向大道 (通往淡水海關)
+    this.drawDirtPath(ctx, 700, 420, 260, 580);  // 西南暗巷泥徑 (通往𧶄瑯私渡口)
 
-    // 中央開市青石廣場 (石龍祥雲紋鋪面)
+    // 東方長河星軌大道 (貫穿至東方時空渡口，寬闊遊樂場通道)
+    this.drawStonePath(ctx, 700, 420, 2320, 420);
+    // 西方時空回溯支線
+    this.drawStonePath(ctx, 700, 420, 200, 420);
+
+    // 繪製東方遊樂場大道與景觀公園
+    this.drawPlaygroundBoulevard(ctx);
+
+    // 中央開市青石廣場 (石龍祥雲紋鋪面，移至 700, 420 開闊中心)
     ctx.save();
     ctx.beginPath();
-    ctx.arc(485, 260, 110, 0, Math.PI * 2);
+    ctx.arc(700, 420, 105, 0, Math.PI * 2);
     ctx.fillStyle = '#192338';
     ctx.fill();
     ctx.strokeStyle = '#ca8a04';
@@ -895,7 +1592,7 @@ class GameController {
 
     // 廣場內圈花崗岩石環
     ctx.beginPath();
-    ctx.arc(485, 260, 82, 0, Math.PI * 2);
+    ctx.arc(700, 420, 78, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
     ctx.setLineDash([10, 8]);
     ctx.stroke();
@@ -904,7 +1601,7 @@ class GameController {
     // 廣場中央吉祥如意回紋印記
     ctx.fillStyle = 'rgba(234, 179, 8, 0.15)';
     ctx.beginPath();
-    ctx.arc(485, 260, 45, 0, Math.PI * 2);
+    ctx.arc(700, 420, 42, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = 'rgba(245, 158, 11, 0.5)';
     ctx.lineWidth = 2;
@@ -913,9 +1610,8 @@ class GameController {
     // 廣場四角石雕風燈
     const angles = [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75];
     for (const ang of angles) {
-      const lx = 485 + Math.cos(ang) * 100;
-      const ly = 260 + Math.sin(ang) * 100;
-      // 燈光光暈
+      const lx = 700 + Math.cos(ang) * 95;
+      const ly = 420 + Math.sin(ang) * 95;
       const radGrad = ctx.createRadialGradient(lx, ly, 2, lx, ly, 32);
       radGrad.addColorStop(0, 'rgba(251, 191, 36, 0.35)');
       radGrad.addColorStop(1, 'rgba(251, 191, 36, 0)');
@@ -924,7 +1620,6 @@ class GameController {
       ctx.arc(lx, ly, 32, 0, Math.PI * 2);
       ctx.fill();
 
-      // 石燈座
       ctx.fillStyle = '#475569';
       ctx.fillRect(lx - 7, ly - 7, 14, 14);
       ctx.fillStyle = '#fef08a';
@@ -932,65 +1627,78 @@ class GameController {
     }
     ctx.restore();
 
-    // ================== 淡水河水文與港灣水景 (前移立體可見) ==================
-    const riverStartY = 480;
-    const waterGrad = ctx.createLinearGradient(0, riverStartY, 0, this.worldHeight);
+    // ================== 淡水河水文與港灣水景 (擴展至地圖底部 750~900) ==================
+    const riverStartY = 750;
+    const waterGrad = ctx.createLinearGradient(0, riverStartY, 0, this.worldHeight + 400);
     waterGrad.addColorStop(0, '#0c2844');
     waterGrad.addColorStop(0.2, '#075985');
     waterGrad.addColorStop(0.65, '#0369a1');
     waterGrad.addColorStop(1, '#0284c7');
 
     ctx.fillStyle = waterGrad;
-    ctx.fillRect(0, riverStartY, this.worldWidth, this.worldHeight - riverStartY);
+    ctx.fillRect(-800, riverStartY, this.worldWidth + 1600, this.worldHeight - riverStartY + 600);
 
     // 河岸石砌防潮坡堤
     ctx.fillStyle = '#334155';
-    ctx.fillRect(0, riverStartY - 8, this.worldWidth, 10);
+    ctx.fillRect(-800, riverStartY - 8, this.worldWidth + 1600, 10);
     ctx.strokeStyle = '#64748b';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(0, riverStartY - 8, this.worldWidth, 10);
+    ctx.strokeRect(-800, riverStartY - 8, this.worldWidth + 1600, 10);
 
-    // 水波粼粼波紋 (隨時間流動動態渲染)
+    // 水波粼粼波紋
     ctx.strokeStyle = 'rgba(186, 230, 253, 0.28)';
     ctx.lineWidth = 2;
-    for (let i = 0; i < 9; i++) {
-      const wy = riverStartY + 20 + i * 32;
+    for (let i = 0; i < 5; i++) {
+      const wy = riverStartY + 20 + i * 26;
       const waveShift = Math.sin(this.ambientLightTick * 1.5 + i * 0.8) * 35;
       ctx.beginPath();
-      ctx.moveTo(0, wy);
+      ctx.moveTo(-800, wy);
       ctx.bezierCurveTo(380 + waveShift, wy - 12, 750 - waveShift, wy + 12, 1100 + waveShift, wy - 6);
-      ctx.lineTo(this.worldWidth, wy);
+      ctx.lineTo(this.worldWidth + 800, wy);
       ctx.stroke();
     }
 
-    // 停泊的清代戎克帆船 (Junk boat at x: 200, y: 570)
-    this.drawChineseJunk(ctx, 200, 570);
+    if (this.currentEraId === 'era_01_prehistory') {
+      // 停泊的史前竹筏與外洋獨木舟
+      this.drawBambooRaft(ctx, 350, 830);
+      this.drawOutriggerCanoe(ctx, 1050, 830);
+    } else {
+      // 停泊的清代戎克帆船
+      this.drawChineseJunk(ctx, 350, 830);
+      // 停泊的開港外商三桅輪船
+      this.drawWesternShip(ctx, 1050, 830);
+    }
 
-    // 停泊的開港外商三桅輪船 (Western trade ship at x: 780, y: 580)
-    this.drawWesternShip(ctx, 780, 580);
-
-    // 碼頭大木棧橋 (Dock Boardwalk at x: 390..580, y: 440..580)
+    // 碼頭大木棧橋
     this.drawDockPier(ctx);
 
-    // 大稻埕老榕樹 (百年老樹遮蔭街角)
-    this.drawBanyanTree(ctx, 290, 200, 48);
-    this.drawBanyanTree(ctx, 660, 210, 50);
+    // 遮陰老榕樹
+    this.drawBanyanTree(ctx, 420, 290, 48);
+    this.drawBanyanTree(ctx, 980, 290, 50);
 
-    // 街邊曬茶竹篩 (Outside 寶順洋行)
-    this.drawTeaTrays(ctx, 780, 205);
-    this.drawTeaTrays(ctx, 780, 245);
+    if (this.currentEraId === 'era_01_prehistory') {
+      // 史前玉石打磨區與聚落陶器
+      this.drawPrehistoricCraftZone(ctx, 1050, 290);
+      this.drawPrehistoricCraftZone(ctx, 1050, 330);
+      this.drawPrehistoricHutStall(ctx, 520, 370);
+      this.drawPrehistoricHutStall(ctx, 880, 370);
+    } else {
+      // 街邊曬茶竹篩 (Outside 寶順洋行)
+      this.drawTeaTrays(ctx, 1050, 290);
+      this.drawTeaTrays(ctx, 1050, 330);
 
-    // 市井生活場景 (奉茶棚、南北貨攤、運茶木板推車、茉莉陶盆)
-    this.drawTeaStall(ctx, 345, 255);
-    this.drawGoodsStall(ctx, 625, 255);
-    this.drawPushcart(ctx, 410, 310);
-    this.drawJasminePot(ctx, 420, 210);
-    this.drawJasminePot(ctx, 550, 210);
-    this.drawJasminePot(ctx, 420, 305);
-    this.drawJasminePot(ctx, 550, 305);
+      // 市井生活場景 (奉茶棚、南北貨攤、運茶推車、茉莉陶盆)
+      this.drawTeaStall(ctx, 520, 370);
+      this.drawGoodsStall(ctx, 880, 370);
+      this.drawPushcart(ctx, 600, 470);
+      this.drawJasminePot(ctx, 580, 320);
+      this.drawJasminePot(ctx, 820, 320);
+      this.drawJasminePot(ctx, 580, 490);
+      this.drawJasminePot(ctx, 820, 490);
+    }
   }
 
-  // 繪製泉州花崗石板路
+    // 繪製泉州花崗石板路
   drawStonePath(ctx, x1, y1, x2, y2) {
     ctx.save();
     ctx.strokeStyle = '#273549';
@@ -1178,8 +1886,8 @@ class GameController {
 
   // 繪製碼頭大木棧橋 (Dock Boardwalk & Tea Cargo Props)
   drawDockPier(ctx) {
-    const px = 390;
-    const py = 440;
+    const px = 605;
+    const py = 720;
     const pw = 190;
     const ph = 140;
 
@@ -1618,9 +2326,122 @@ class GameController {
     ctx.restore();
   }
 
+  // 繪製史前竹筏 (Prehistoric Bamboo Raft)
+  drawBambooRaft(ctx, x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(5, 30, 50, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(0, 10, 55, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = -4; i <= 4; i++) {
+      ctx.fillStyle = i % 2 === 0 ? '#65a30d' : '#84cc16';
+      ctx.beginPath();
+      ctx.roundRect(-48, i * 4.5, 96, 4, 2);
+      ctx.fill();
+      ctx.strokeStyle = '#365314';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(-30, -20); ctx.lineTo(-30, 20);
+    ctx.moveTo(0, -20); ctx.lineTo(0, 20);
+    ctx.moveTo(30, -20); ctx.lineTo(30, 20);
+    ctx.stroke();
+    ctx.strokeStyle = '#d97706';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-15, -25); ctx.lineTo(25, 25);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 繪製史前南島外洋獨木舟 (Prehistoric Outrigger Canoe)
+  drawOutriggerCanoe(ctx, x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = '#78350f';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 55, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#451a03';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#b45309';
+    ctx.beginPath();
+    ctx.moveTo(-55, 0); ctx.lineTo(-66, -9); ctx.lineTo(-48, 2); ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(55, 0); ctx.lineTo(66, -9); ctx.lineTo(48, 2); ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#ca8a04';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-22, 10); ctx.lineTo(-22, 28);
+    ctx.moveTo(22, 10); ctx.lineTo(22, 28);
+    ctx.stroke();
+    ctx.fillStyle = '#854d0e';
+    ctx.beginPath();
+    ctx.ellipse(0, 29, 45, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 繪製史前玉石打磨區與石砧 (Prehistoric Jade Grinding Slab)
+  drawPrehistoricCraftZone(ctx, x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = '#475569';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 20, 13, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // 溫潤閃玉玦原胚
+    ctx.fillStyle = '#34d399';
+    ctx.beginPath();
+    ctx.arc(-4, -2, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 繪製史前茅草部落棚架與陶罐 (Prehistoric Tribal Thatched Stall)
+  drawPrehistoricHutStall(ctx, x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    // 木樁柱
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-18, 15); ctx.lineTo(-18, -12);
+    ctx.moveTo(18, 15); ctx.lineTo(18, -12);
+    ctx.stroke();
+    // 茅草頂棚
+    ctx.fillStyle = '#ca8a04';
+    ctx.beginPath();
+    ctx.moveTo(0, -24);
+    ctx.lineTo(24, -10);
+    ctx.lineTo(-24, -10);
+    ctx.closePath();
+    ctx.fill();
+    // 紅陶罐
+    ctx.fillStyle = '#c2410c';
+    ctx.beginPath();
+    ctx.arc(-6, 8, 7, 0, Math.PI * 2);
+    ctx.arc(8, 9, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   // 2. 繪製環境飄浮粒子 (Tea Leaves, Sparks & Seagulls)
   drawAmbientParticles(ctx) {
-    // 飄落茶葉與燈花
+    // 飄落茶葉與燈花 / 玉石微粒
     for (const p of this.ambientParticles) {
       ctx.save();
       ctx.globalAlpha = p.alpha;
@@ -1631,6 +2452,11 @@ class GameController {
         ctx.fillStyle = '#4ade80';
         ctx.beginPath();
         ctx.ellipse(0, 0, p.size, p.size * 0.45, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === 'jadespark') {
+        ctx.fillStyle = '#34d399';
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size * 0.5, 0, Math.PI * 2);
         ctx.fill();
       } else {
         ctx.fillStyle = '#fbbf24';
@@ -1664,110 +2490,144 @@ class GameController {
     for (const loc of this.models.MAP_LOCATIONS) {
       const opt = currentNode ? currentNode.options.find(o => o.targetLocationId === loc.id) : null;
       const isTarget = !!opt || loc.id === 'loc_dock';
-      const isRecommended = opt && opt.requiredClues.length > 0 && opt.requiredClues.every(cid => this.state.unlockedClues.includes(cid));
+      const reqClues = opt ? (opt.requiredClues || (opt.requiredClueId ? [opt.requiredClueId] : [])) : [];
+      const isRecommended = reqClues.length > 0 && reqClues.every(cid => this.state.unlockedClues.includes(cid));
 
       ctx.save();
 
       // 1. 地面發光法陣 (Ground Interactivity Circle)
       const ringColor = isRecommended ? '#f59e0b' : (opt ? loc.themeColor : '#64748b');
-      const pulse = Math.sin(this.ambientLightTick * 2.5) * 5;
+      const pulse = Math.sin(this.ambientLightTick * 2.5) * 3;
 
       ctx.beginPath();
-      ctx.arc(loc.doorX, loc.doorY, 52 + pulse, 0, Math.PI * 2);
+      ctx.arc(loc.doorX, loc.doorY, 40 + pulse, 0, Math.PI * 2);
       ctx.fillStyle = isRecommended ? 'rgba(245, 158, 11, 0.2)' : 'rgba(56, 189, 248, 0.1)';
       ctx.fill();
       ctx.strokeStyle = ringColor;
-      ctx.lineWidth = isRecommended ? 3.5 : 2;
+      ctx.lineWidth = isRecommended ? 3 : 2;
       ctx.stroke();
 
       // 內圈八卦/商行刻度
       ctx.beginPath();
-      ctx.arc(loc.doorX, loc.doorY, 34, 0, Math.PI * 2);
+      ctx.arc(loc.doorX, loc.doorY, 24, 0, Math.PI * 2);
       ctx.strokeStyle = ringColor;
       ctx.setLineDash([4, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // 2. 特色時代立體建築本體繪製
+      // 2. 特色時代立體建築本體繪製 (依據當前年代動態切換)
       if (loc.id === 'loc_player_home') {
-        this.drawBuildingPlayerHome(ctx, loc, ringColor);
+        if (this.currentEraId === 'era_01_prehistory') {
+          this.drawBuildingPrehistoricHome(ctx, loc, ringColor);
+        } else {
+          this.drawBuildingPlayerHome(ctx, loc, ringColor);
+        }
       } else if (loc.id === 'loc_sugar_guild') {
-        this.drawBuildingFujianGuild(ctx, loc, ringColor);
+        if (this.currentEraId === 'era_01_prehistory') {
+          this.drawBuildingPrehistoricJadeWorkshop(ctx, loc, ringColor);
+        } else {
+          this.drawBuildingFujianGuild(ctx, loc, ringColor);
+        }
       } else if (loc.id === 'loc_tea_firm') {
-        this.drawBuildingWesternArcade(ctx, loc, ringColor);
+        if (this.currentEraId === 'era_01_prehistory') {
+          this.drawBuildingPrehistoricIronSmelter(ctx, loc, ringColor);
+        } else {
+          this.drawBuildingWesternArcade(ctx, loc, ringColor);
+        }
       } else if (loc.id === 'loc_customs') {
-        this.drawBuildingCustomsGate(ctx, loc, ringColor);
+        if (this.currentEraId === 'era_01_prehistory') {
+          this.drawBuildingPrehistoricCaveMegalith(ctx, loc, ringColor);
+        } else {
+          this.drawBuildingCustomsGate(ctx, loc, ringColor);
+        }
       } else if (loc.id === 'loc_dock') {
-        this.drawBuildingDockWarehouse(ctx, loc, ringColor);
+        if (this.currentEraId === 'era_01_prehistory') {
+          this.drawBuildingPrehistoricRaftLanding(ctx, loc, ringColor);
+        } else {
+          this.drawBuildingDockWarehouse(ctx, loc, ringColor);
+        }
       } else {
-        this.drawBuildingSmugglerShack(ctx, loc, ringColor);
+        if (this.currentEraId === 'era_01_prehistory') {
+          this.drawBuildingPrehistoricOutriggerCamp(ctx, loc, ringColor);
+        } else {
+          this.drawBuildingSmugglerShack(ctx, loc, ringColor);
+        }
       }
 
-      // 3. 【古風門額木匾】(商號名稱，固定於屋簷上方，清晰黑漆金字)
-      const plaqueY = loc.y - 18;
-      const plaqueW = 164;
-      const plaqueH = 26;
+      // 3. 【古風門額木匾】(商號/聚落地標名稱，字體放大清晰醒目)
+      const plaqueY = loc.y - 24;
+      const plaqueW = 208;
+      const plaqueH = 34;
 
       ctx.fillStyle = '#1c0f08'; // 仿紅木黑漆
       ctx.strokeStyle = loc.id === 'loc_player_home' ? '#4ade80' : '#ca8a04'; // 鎏金包邊
-      ctx.lineWidth = 2.0;
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
-      ctx.roundRect(loc.x + loc.width / 2 - plaqueW / 2, plaqueY, plaqueW, plaqueH, 5);
+      ctx.roundRect(loc.x + loc.width / 2 - plaqueW / 2, plaqueY, plaqueW, plaqueH, 7);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = loc.id === 'loc_player_home' ? '#86efac' : '#fef08a';
-      ctx.font = 'bold 14px "Noto Serif TC", "Songti TC", serif';
+      ctx.font = 'bold 18px "Noto Serif TC", "Songti TC", serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.shadowColor = 'black';
-      ctx.shadowBlur = 4;
+      ctx.shadowBlur = 5;
       ctx.fillText(loc.banner, loc.x + loc.width / 2, plaqueY + plaqueH / 2);
       ctx.shadowBlur = 0;
 
       // 4. 【當前歷史任務標籤】(高架於建築上空，縱向空間獨立，絕不與門額重疊！)
       if (opt || loc.id === 'loc_dock' || loc.id === 'loc_player_home') {
-        const floatY = loc.y - 52 + Math.sin(this.ambientLightTick * 3 + loc.doorX) * 3;
-        const badgeW = 172;
-        const badgeH = 25;
+        const floatY = loc.y - 66 + Math.sin(this.ambientLightTick * 3 + loc.doorX) * 3;
+        const badgeW = 216;
+        const badgeH = 32;
+
+        const workName = (this.currentEra && this.currentEra.workActionName) || '打工理貨';
+        const homeName = (this.currentEra && this.currentEra.homeName) || '居所宅邸';
 
         let badgeBg = 'rgba(30, 41, 59, 0.95)';
         let badgeBorder = '#38bdf8';
-        let badgeText = opt ? (opt.badge || '💡 歷史抉擇') : '⚓ 碼頭理貨打工';
+        let badgeText = opt ? (opt.badge || '💡 歷史抉擇') : `🛶 ${workName}`;
         let badgeTextColor = '#f8fafc';
 
         if (loc.id === 'loc_player_home') {
           badgeBg = 'rgba(15, 60, 35, 0.96)';
           badgeBorder = '#4ade80';
-          badgeText = `🏡 承恩宅邸 · Lv.${this.state.homeLevel} (換裝/收租)`;
+          badgeText = `🛖 ${homeName} · Lv.${this.state.homeLevel || 1}`;
           badgeTextColor = '#fef08a';
         } else if (isRecommended) {
           badgeBg = 'rgba(245, 158, 11, 0.98)';
           badgeBorder = '#fef08a';
-          badgeText = '★ 秘笈首選 · 暴擊利潤';
+          if (this.state.roleType === 'bureaucrat') {
+            badgeText = '★ 錦囊首選 · 審定制度';
+          } else if (this.state.roleType === 'pioneer') {
+            badgeText = '★ 錦囊首選 · 議決盟約';
+          } else {
+            badgeText = '★ 秘笈首選 · 暴擊利潤';
+          }
           badgeTextColor = '#000000';
         } else if (loc.id === 'loc_smuggler') {
           badgeBg = 'rgba(220, 38, 38, 0.95)';
           badgeBorder = '#fca5a5';
-          badgeText = '⚠️ 官府嚴查 · 走私暴利';
+          badgeText = this.currentEraId === 'era_01_prehistory' ? '🌊 越洋黑潮 · 換南洋珠' : '⚠️ 官府嚴查 · 走私暴利';
           badgeTextColor = '#ffffff';
         } else if (loc.id === 'loc_dock') {
           badgeBg = 'rgba(2, 132, 199, 0.95)';
           badgeBorder = '#7dd3fc';
-          badgeText = '⚓ 碼頭打工 · 探聽商情';
+          badgeText = `🛶 ${workName} · 探聽情報`;
           badgeTextColor = '#ffffff';
         }
 
         ctx.fillStyle = badgeBg;
         ctx.strokeStyle = badgeBorder;
-        ctx.lineWidth = 1.8;
+        ctx.lineWidth = 2.0;
         ctx.beginPath();
-        ctx.roundRect(loc.x + loc.width / 2 - badgeW / 2, floatY, badgeW, badgeH, 12);
+        ctx.roundRect(loc.x + loc.width / 2 - badgeW / 2, floatY, badgeW, badgeH, 14);
         ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = badgeTextColor;
-        ctx.font = 'bold 12px "Noto Sans TC", sans-serif';
+        ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(badgeText, loc.x + loc.width / 2, floatY + badgeH / 2);
@@ -2248,6 +3108,377 @@ class GameController {
     ctx.fill();
   }
 
+  // ======================== 史前時代專屬特色建築群 (Prehistoric Taiwan Architecture) ========================
+  // 史前建築 0：🛖 卑南聚落 · 板岩干欄石屋 (自家部落居所)
+  drawBuildingPrehistoricHome(ctx, loc, ringColor) {
+    const x = loc.x, y = loc.y, w = loc.width, h = loc.height;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(x + 6, y + 16, w, h);
+
+    // 干欄木柱架高地基 (Stilts)
+    ctx.fillStyle = '#451a03';
+    for (let st = x + 15; st < x + w - 10; st += 25) {
+      ctx.fillRect(st, y + h - 22, 8, 22);
+    }
+    // 板岩平台底座
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(x + 8, y + h - 26, w - 16, 8);
+
+    // 竹編藤條混泥土屋身
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(x + 12, y + 36, w - 24, h - 60);
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = 1.2;
+    for (let bx = x + 20; bx < x + w - 20; bx += 12) {
+      ctx.beginPath();
+      ctx.moveTo(bx, y + 36);
+      ctx.lineTo(bx, y + h - 26);
+      ctx.stroke();
+    }
+
+    // 卑南厚實板岩雙坡茅草屋頂
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y + 8);
+    ctx.lineTo(x + w + 12, y + 44);
+    ctx.lineTo(x - 12, y + 44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // 茅草簷口
+    ctx.fillStyle = '#ca8a04';
+    ctx.fillRect(x - 10, y + 42, w + 20, 5);
+
+    // 入口木梯與柴門
+    ctx.fillStyle = '#1c1917';
+    ctx.fillRect(loc.doorX - 16, y + h - 46, 32, 24);
+    // 木梯
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(loc.doorX - 10, y + h - 22, 20, 22);
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = 1.5;
+    for (let ly = y + h - 18; ly < y + h; ly += 6) {
+      ctx.beginPath();
+      ctx.moveTo(loc.doorX - 10, ly);
+      ctx.lineTo(loc.doorX + 10, ly);
+      ctx.stroke();
+    }
+
+    // 門口懸掛避邪臺灣玉玦
+    ctx.fillStyle = '#10b981';
+    ctx.beginPath();
+    ctx.arc(loc.doorX - 22, y + 48, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#064e3b';
+    ctx.beginPath();
+    ctx.arc(loc.doorX - 22, y + 48, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 門前石臼與紅陶罐
+    ctx.fillStyle = '#64748b';
+    ctx.fillRect(x + 18, y + h - 14, 12, 12);
+    ctx.fillStyle = '#c2410c';
+    ctx.beginPath();
+    ctx.arc(x + w - 24, y + h - 8, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 史前建築 1：📿 卑南玉玦琢磨工坊
+  drawBuildingPrehistoricJadeWorkshop(ctx, loc, ringColor) {
+    const x = loc.x, y = loc.y, w = loc.width, h = loc.height;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(x + 6, y + 16, w, h);
+
+    // 琢玉敞棚立柱
+    ctx.fillStyle = '#522b10';
+    ctx.fillRect(x + 8, y + 36, 8, h - 36);
+    ctx.fillRect(x + w - 16, y + 36, 8, h - 36);
+    ctx.fillRect(x + w / 2 - 4, y + 30, 8, h - 30);
+
+    // 琢棚金黃闊葉草頂
+    ctx.fillStyle = '#a16207';
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y + 10);
+    ctx.lineTo(x + w + 14, y + 42);
+    ctx.lineTo(x - 14, y + 42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#ca8a04';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 琢磨長石台與解玉砂槽
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(x + 22, y + h - 38, w - 44, 22);
+    ctx.strokeStyle = '#0284c7';
+    ctx.strokeRect(x + 26, y + h - 34, 30, 14);
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.4)';
+    ctx.fillRect(x + 27, y + h - 33, 28, 12);
+
+    // 臺灣豐田翠玉原石 (綠光微暈)
+    const jadeGlow = Math.sin(this.ambientLightTick * 3) * 2;
+    ctx.fillStyle = '#10b981';
+    ctx.beginPath();
+    ctx.arc(x + w - 38, y + h - 26, 9 + jadeGlow, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#34d399';
+    ctx.beginPath();
+    ctx.arc(x + w - 40, y + h - 28, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 展架上的雙人獸形玉玦與玉鈴珠
+    ctx.strokeStyle = '#34d399';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h - 25, 6, 0, Math.PI * 1.7);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(x + w / 2 - 1, y + h - 34, 2, 8);
+  }
+
+  // 史前建築 2：🔥 十三行煉鐵高溫工棚
+  drawBuildingPrehistoricIronSmelter(ctx, loc, ringColor) {
+    const x = loc.x, y = loc.y, w = loc.width, h = loc.height;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(x + 6, y + 16, w, h);
+
+    // 粗重原木黑棚立柱
+    ctx.fillStyle = '#292524';
+    ctx.fillRect(x + 10, y + 34, 10, h - 34);
+    ctx.fillRect(x + w - 20, y + 34, 10, h - 34);
+
+    // 燻黑茅草棚頂
+    ctx.fillStyle = '#44403c';
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y + 12);
+    ctx.lineTo(x + w + 10, y + 42);
+    ctx.lineTo(x - 10, y + 42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#ea580c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 高溫黏土煉鐵豎爐 (Blast Furnace)
+    const firePulse = Math.sin(this.ambientLightTick * 6) * 3;
+    ctx.fillStyle = '#78350f';
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2 - 20, y + h - 10);
+    ctx.lineTo(x + w / 2 - 14, y + 40);
+    ctx.lineTo(x + w / 2 + 14, y + 40);
+    ctx.lineTo(x + w / 2 + 20, y + h - 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // 爐膛金紅烈焰火光
+    const fireGrad = ctx.createRadialGradient(x + w / 2, y + h - 26, 2, x + w / 2, y + h - 26, 18 + firePulse);
+    fireGrad.addColorStop(0, '#fef08a');
+    fireGrad.addColorStop(0.4, '#ea580c');
+    fireGrad.addColorStop(1, 'rgba(234, 88, 12, 0)');
+    ctx.fillStyle = fireGrad;
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h - 26, 18 + firePulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 爐門炭火
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(x + w / 2 - 8, y + h - 28, 16, 14);
+
+    // 雙管木風箱 (Bellows)
+    ctx.fillStyle = '#57534e';
+    ctx.fillRect(x + 22, y + h - 24, 20, 12);
+    ctx.strokeStyle = '#a8a29e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 42, y + h - 18);
+    ctx.lineTo(x + w / 2 - 10, y + h - 18);
+    ctx.stroke();
+
+    // 堆疊的鐵渣堆 (Iron Slag)
+    ctx.fillStyle = '#1c1917';
+    for (let sx = x + w - 38; sx < x + w - 14; sx += 7) {
+      ctx.beginPath();
+      ctx.arc(sx, y + h - 12, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 史前建築 3：🗿 八仙洞長濱氏族集會所
+  drawBuildingPrehistoricCaveMegalith(ctx, loc, ringColor) {
+    const x = loc.x, y = loc.y, w = loc.width, h = loc.height;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(x + 6, y + 16, w, h);
+
+    // 巍峨海蝕洞岩石山壁
+    ctx.fillStyle = '#292524';
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + h);
+    ctx.lineTo(x + 6, y + 26);
+    ctx.bezierCurveTo(x + 30, y + 8, x + w - 30, y + 8, x + w - 6, y + 26);
+    ctx.lineTo(x + w + 8, y + h);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#57534e';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 洞穴深邃入口
+    ctx.fillStyle = '#0c0a09';
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h - 18, 26, Math.PI, 0);
+    ctx.lineTo(x + w / 2 + 26, y + h);
+    ctx.lineTo(x + w / 2 - 26, y + h);
+    ctx.closePath();
+    ctx.fill();
+
+    // 卑南月形巨石柱 (Megalith Monolith)
+    ctx.fillStyle = '#78716c';
+    ctx.beginPath();
+    ctx.roundRect(x + 16, y + 28, 14, h - 38, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#a8a29e';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // 月形石柱穿孔
+    ctx.fillStyle = '#1c1917';
+    ctx.beginPath();
+    ctx.arc(x + 23, y + 42, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 洞口部族篝火火盆
+    const ember = Math.sin(this.ambientLightTick * 5) * 2;
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h - 16, 7 + ember, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h - 16, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 史前建築 4：🛶 卑南溪口竹筏渡頭
+  drawBuildingPrehistoricRaftLanding(ctx, loc, ringColor) {
+    const x = loc.x, y = loc.y, w = loc.width, h = loc.height;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(x + 6, y + 16, w, h);
+
+    // 水岸木樁與竹排引橋
+    ctx.fillStyle = '#522b10';
+    ctx.fillRect(x + 14, y + 36, 8, h - 36);
+    ctx.fillRect(x + w - 22, y + 36, 8, h - 36);
+
+    // 竹管拼合平臺
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(x + 10, y + 38, w - 20, 24);
+    ctx.strokeStyle = '#a16207';
+    ctx.lineWidth = 1.2;
+    for (let py = y + 42; py < y + 60; py += 5) {
+      ctx.beginPath();
+      ctx.moveTo(x + 10, py);
+      ctx.lineTo(x + w - 10, py);
+      ctx.stroke();
+    }
+
+    // 晾魚木架與魚獲
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 24, y + 14);
+    ctx.lineTo(x + w - 24, y + 14);
+    ctx.moveTo(x + 28, y + 14);
+    ctx.lineTo(x + 28, y + 38);
+    ctx.moveTo(x + w - 28, y + 14);
+    ctx.lineTo(x + w - 28, y + 38);
+    ctx.stroke();
+
+    // 晾曬小魚乾
+    ctx.fillStyle = '#94a3b8';
+    for (let fx = x + 36; fx < x + w - 36; fx += 10) {
+      ctx.fillRect(fx, y + 17, 3, 8);
+    }
+
+    // 繫留的巨竹編筏
+    ctx.fillStyle = '#ca8a04';
+    ctx.beginPath();
+    ctx.roundRect(x + 18, y + h - 32, w - 36, 18, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#713f12';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    for (let bx = x + 24; bx < x + w - 20; bx += 8) {
+      ctx.beginPath();
+      ctx.moveTo(bx, y + h - 32);
+      ctx.lineTo(bx, y + h - 14);
+      ctx.stroke();
+    }
+  }
+
+  // 史前建築 5：🌊 黑潮外洋獨木舟泊地
+  drawBuildingPrehistoricOutriggerCamp(ctx, loc, ringColor) {
+    const x = loc.x, y = loc.y, w = loc.width, h = loc.height;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(x + 6, y + 16, w, h);
+
+    // 棕櫚闊葉斜向草棚
+    ctx.fillStyle = '#3f6212';
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y + 24);
+    ctx.lineTo(x + w + 8, y + 14);
+    ctx.lineTo(x + w + 4, y + 36);
+    ctx.lineTo(x - 6, y + 42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#65a30d';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 獨木舟 (Outrigger Canoe) 船體
+    ctx.fillStyle = '#78350f';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2 - 10, y + h - 22, 38, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#451a03';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // 浮力支架 (Outrigger Float)
+    ctx.fillStyle = '#ca8a04';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2 - 10, y + h - 6, 32, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#522b10';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2 - 30, y + h - 22);
+    ctx.lineTo(x + w / 2 - 30, y + h - 6);
+    ctx.moveTo(x + w / 2 + 10, y + h - 22);
+    ctx.lineTo(x + w / 2 + 10, y + h - 6);
+    ctx.stroke();
+
+    // 南島三角形草蓆帆 (Woven mat sail)
+    ctx.fillStyle = '#fed7aa';
+    ctx.beginPath();
+    ctx.moveTo(x + w - 28, y + 22);
+    ctx.lineTo(x + w - 10, y + h - 24);
+    ctx.lineTo(x + w - 42, y + h - 24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#ea580c';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // 擺放的南海瑪瑙珠與黑曜石
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath(); ctx.arc(x + 18, y + h - 14, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath(); ctx.arc(x + 28, y + h - 14, 4.5, 0, Math.PI * 2); ctx.fill();
+  }
+
   // 繪製傳統紅紙燈籠
   drawHangingLantern(ctx, x, y, char) {
     ctx.save();
@@ -2353,6 +3584,63 @@ class GameController {
         ctx.moveTo(9, -28);
         ctx.lineTo(9, 10);
         ctx.stroke();
+
+      } else if (npc.type === 'tribal') {
+        // 史前獵手 (皮毛短甲 + 獵弓 + 羽飾)
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(-6, -16, 12, 18);
+        ctx.fillStyle = '#d97706';
+        ctx.beginPath(); ctx.arc(0, -20, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.moveTo(0, -26); ctx.lineTo(3, -33); ctx.stroke();
+        ctx.strokeStyle = '#92400e'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(10, -10, 10, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+
+      } else if (npc.type === 'smith') {
+        // 十三行煉鐵匠 (石棉圍裙 + 鐵鉗 + 火光)
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(-7, -17, 14, 19);
+        ctx.fillStyle = '#ea580c';
+        ctx.fillRect(-5, -12, 10, 14);
+        ctx.fillStyle = '#fed7aa'; ctx.beginPath(); ctx.arc(0, -20, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-10, -16); ctx.lineTo(-10, -2); ctx.stroke();
+
+      } else if (npc.type === 'tribal_woman') {
+        // 母系長老 (麻織長袍 + 貝珠項圈 + 紅陶罐)
+        ctx.fillStyle = '#be185d';
+        ctx.fillRect(-7, -19, 14, 21);
+        ctx.fillStyle = '#fed7aa'; ctx.beginPath(); ctx.arc(0, -21, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(0, -14, 5, 0, Math.PI); ctx.stroke();
+        ctx.fillStyle = '#c2410c'; ctx.beginPath(); ctx.arc(8, -10, 5, 0, Math.PI * 2); ctx.fill();
+
+      } else if (npc.type === 'stone_elder') {
+        // 長濱先民長老 (灰皮粗衣 + 打製石斧)
+        ctx.fillStyle = '#57534e';
+        ctx.fillRect(-7, -17, 14, 19);
+        ctx.fillStyle = '#d6d3d1'; ctx.beginPath(); ctx.arc(0, -20, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#78350f'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-10, -20); ctx.lineTo(-10, -2); ctx.stroke();
+        ctx.fillStyle = '#292524'; ctx.fillRect(-14, -20, 7, 5);
+
+      } else if (npc.type === 'tribal_sailor') {
+        // 南島遠航水手 (短短裙 + 木槳)
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(-6, -15, 12, 16);
+        ctx.fillStyle = '#fed7aa'; ctx.beginPath(); ctx.arc(0, -19, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#b45309'; ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.moveTo(9, -26); ctx.lineTo(9, 6); ctx.stroke();
+        ctx.fillStyle = '#92400e'; ctx.fillRect(6, 0, 6, 9);
+
+      } else if (npc.type === 'dutch_soldier') {
+        // 荷蘭衛兵 (藍色軍裝 + 寬簷帽 + 火槍)
+        ctx.fillStyle = '#1d4ed8';
+        ctx.fillRect(-7, -18, 14, 20);
+        ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.arc(0, -22, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fed7aa'; ctx.beginPath(); ctx.arc(0, -20, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#78350f'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(9, -28); ctx.lineTo(9, 6); ctx.stroke();
 
       } else {
         // 學徒 / 船伕
@@ -2532,7 +3820,40 @@ class GameController {
     // 3. 服飾與身份階層繪製 (支援自家衣裳閣換裝系統)
     const outfitId = (this.state && this.state.currentOutfit) || (tier.level === 3 ? 'outfit_magnate' : (tier.level === 2 ? 'outfit_scholar' : 'outfit_peasant'));
 
-    if (outfitId === 'outfit_peasant') {
+    if (this.currentEraId === 'era_01_prehistory') {
+      // 史前裝扮：南島麻織斜衿坎肩 + 貝珠背帶 + 佩帶墨綠玉玦
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.roundRect(-14, -14 - bob, 28, 26, 7);
+      ctx.fill();
+      ctx.strokeStyle = '#b45309';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 斜向白色貝珠串帶
+      ctx.strokeStyle = '#fef08a';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-12, -12 - bob);
+      ctx.lineTo(12, 10 - bob);
+      ctx.stroke();
+
+      // 腰間配飾：臺灣綠玉玦
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.arc(-11, 2 - bob, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#064e3b';
+      ctx.beginPath();
+      ctx.arc(-11, 2 - bob, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 手持磨製石器工具
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(12, -4 - bob, 5, 12);
+      ctx.strokeStyle = '#94a3b8';
+      ctx.strokeRect(12, -4 - bob, 5, 12);
+    } else if (outfitId === 'outfit_peasant') {
       // 裝扮 1：布衣挑擔短打 (青布右衽短褂 + 腰帶 + 背後斜背竹編斗笠)
       ctx.fillStyle = '#1e3a5f';
       ctx.beginPath();
@@ -2753,16 +4074,41 @@ class GameController {
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // 清代半剃半留乾淨髮際線 (Shaved Forehead to Black Hair)
-    ctx.fillStyle = '#090d16';
-    ctx.beginPath();
-    ctx.arc(0, faceY, 12, Math.PI * 1.05, Math.PI * 1.95);
-    ctx.fill();
+    if (this.currentEraId === 'era_01_prehistory') {
+      // 史前南島先民髮型：全黑烏髮 + 部落紅編織頭帶 + 翠綠臺灣玉石飾珠
+      ctx.fillStyle = '#090d16';
+      ctx.beginPath();
+      ctx.arc(0, faceY, 12.5, Math.PI * 0.9, Math.PI * 2.1);
+      ctx.fill();
 
-    // 兩側英挺鬢角
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(-12, faceY - 4, 2.5, 8);
-    ctx.fillRect(9.5, faceY - 4, 2.5, 8);
+      // 部落紅編織頭帶
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, faceY - 2, 11.5, Math.PI * 1.1, Math.PI * 1.9);
+      ctx.stroke();
+
+      // 頭帶中央鑲嵌臺灣綠玉珠
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.arc(0, faceY - 13, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#6ee7b7';
+      ctx.beginPath();
+      ctx.arc(-1, faceY - 14, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // 清代半剃半留乾淨髮際線 (Shaved Forehead to Black Hair)
+      ctx.fillStyle = '#090d16';
+      ctx.beginPath();
+      ctx.arc(0, faceY, 12, Math.PI * 1.05, Math.PI * 1.95);
+      ctx.fill();
+
+      // 兩側英挺鬢角
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(-12, faceY - 4, 2.5, 8);
+      ctx.fillRect(9.5, faceY - 4, 2.5, 8);
+    }
 
     // 靈動眼神與高光 (Large expressive anime eyes with specular highlights)
     // 左眼
@@ -2932,11 +4278,11 @@ class GameController {
 
     // 淡水河水道
     mctx.fillStyle = '#0284c7';
-    mctx.fillRect(0, 640 * scaleY, mw, (this.worldHeight - 640) * scaleY);
+    mctx.fillRect(0, 750 * scaleY, mw, (this.worldHeight - 750) * scaleY);
 
     // 木棧橋
     mctx.fillStyle = '#78350f';
-    mctx.fillRect(410 * scaleX, 560 * scaleY, 180 * scaleX, 150 * scaleY);
+    mctx.fillRect(605 * scaleX, 720 * scaleY, 190 * scaleX, 140 * scaleY);
 
     // 標註各大商行與地標
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
@@ -2947,6 +4293,43 @@ class GameController {
       mctx.fillStyle = isTarget ? (loc.themeColor || '#f59e0b') : '#475569';
       mctx.beginPath();
       mctx.arc(loc.doorX * scaleX, loc.doorY * scaleY, isTarget ? 4.5 : 2.5, 0, Math.PI * 2);
+      mctx.fill();
+    }
+
+    // 標註大道主線與東方時空渡口
+    mctx.strokeStyle = 'rgba(100, 116, 139, 0.5)';
+    mctx.lineWidth = 1.5;
+    mctx.beginPath();
+    mctx.moveTo(260 * scaleX, 420 * scaleY);
+    mctx.lineTo(2320 * scaleX, 420 * scaleY);
+    mctx.stroke();
+
+    const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
+    const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
+    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted();
+
+    if (hasNextEra) {
+      if (!isNextUnlocked) {
+        // 小地圖標註封印壁障虛線
+        mctx.strokeStyle = '#f43f5e';
+        mctx.lineWidth = 1.5;
+        mctx.beginPath();
+        mctx.moveTo(2260 * scaleX, 0);
+        mctx.lineTo(2260 * scaleX, this.worldHeight * scaleY);
+        mctx.stroke();
+      }
+      mctx.fillStyle = isNextUnlocked ? '#a855f7' : '#e11d48';
+      mctx.beginPath();
+      mctx.arc(2320 * scaleX, 420 * scaleY, isNextUnlocked ? 4.5 : 3.5, 0, Math.PI * 2);
+      mctx.fill();
+      mctx.strokeStyle = isNextUnlocked ? '#38bdf8' : '#fda4af';
+      mctx.lineWidth = 1.2;
+      mctx.stroke();
+    }
+    if (curEraIdx > 0) {
+      mctx.fillStyle = '#d97706';
+      mctx.beginPath();
+      mctx.arc(200 * scaleX, 420 * scaleY, 3, 0, Math.PI * 2);
       mctx.fill();
     }
 
@@ -3002,6 +4385,7 @@ class GameController {
 
     // 支援點擊地面移動與自動尋路 (Click / Tap to Move)
     this.canvas.addEventListener('click', (e) => {
+      if (this.isAnyModalOpen()) return;
       // 轉換視口點擊為世界坐標 (考慮相機位移)
       const rect = this.canvas.getBoundingClientRect();
       const cssX = e.clientX - rect.left;
@@ -3035,7 +4419,12 @@ class GameController {
   }
 
   setNavTarget(x, y, label = null) {
-    const clampedX = Math.max(50, Math.min(this.worldWidth - 50, x));
+    let targetX = x;
+    if (!this.isCurrentEraCompleted() && targetX > 2250) {
+      targetX = 2250;
+      this.showToast('🔒 尚未破關，東方時空封印壁障無法通行！', 3000);
+    }
+    const clampedX = Math.max(50, Math.min(this.worldWidth - 50, targetX));
     const clampedY = Math.max(50, Math.min(this.worldHeight - 50, y));
 
     this.hero.navTarget = {
@@ -3052,6 +4441,91 @@ class GameController {
     if (window.soundFx) window.soundFx.playClick();
   }
 
+  // 開啟行商秘笈 (常設免費文字指引，簡潔乾淨如圖一風格)
+  openQuestSecretModal() {
+    if (window.soundFx) window.soundFx.playClick();
+    const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
+    if (!currentNode) return;
+
+    let targetLoc = null;
+    const recOpt = currentNode.options.find(o => o.isHistorical) || currentNode.options[0];
+    if (recOpt) {
+      targetLoc = this.models.MAP_LOCATIONS.find(l => l.id === recOpt.targetLocationId);
+    }
+    if (!targetLoc) targetLoc = this.models.MAP_LOCATIONS[0];
+
+    // 取得方位描述 (如：東北方、西南方、城鎮北面)
+    let dirDesc = '';
+    const dx = targetLoc.doorX - (this.hero ? this.hero.x : 700);
+    const dy = targetLoc.doorY - (this.hero ? this.hero.y : 500);
+    const northSouth = dy < -80 ? '北' : (dy > 80 ? '南' : '');
+    const eastWest = dx < -80 ? '西' : (dx > 80 ? '東' : '');
+    dirDesc = (northSouth && eastWest) ? `${northSouth}${eastWest}方` : (northSouth ? `${northSouth}方` : (eastWest ? `${eastWest}方` : '近處'));
+
+    // 標題與徽章：如 📜 熱蘭遮評議稅章秘笈 或 📜 1642 年秋 · 政務秘笈
+    const titleEl = document.getElementById('secret-quest-title');
+    const tipEl = document.getElementById('secret-quest-tip');
+    const loreEl = document.getElementById('secret-quest-lore');
+    const badgeEl = document.getElementById('secret-quest-badge');
+
+    if (badgeEl) {
+      if (this.state.roleType === 'bureaucrat') {
+        badgeEl.innerText = '當前政務錦囊';
+      } else if (this.state.roleType === 'pioneer') {
+        badgeEl.innerText = '當前先鋒錦囊';
+      } else {
+        badgeEl.innerText = '當前行商錦囊';
+      }
+    }
+
+    // 若當前節點或解鎖的情報中有對應 clue，優先採用該 clue 精簡文字；否則由節點自動提取超精煉文本
+    let bestClue = null;
+    if (recOpt && recOpt.requiredClues && recOpt.requiredClues.length > 0) {
+      bestClue = this.models.CLUE_DATABASE[recOpt.requiredClues[0]];
+    }
+    if (!bestClue && this.state.unlockedClues && this.state.unlockedClues.length > 0) {
+      for (const cid of this.state.unlockedClues) {
+        if (this.models.CLUE_DATABASE[cid]) {
+          bestClue = this.models.CLUE_DATABASE[cid];
+          break;
+        }
+      }
+    }
+
+    if (titleEl) {
+      const eraShort = (this.currentEra ? this.currentEra.year : '當前時代');
+      const roleName = this.state.roleType === 'bureaucrat' ? '政務秘笈' : (this.state.roleType === 'pioneer' ? '先鋒盟約' : '行商秘笈');
+      titleEl.innerText = bestClue ? `${bestClue.icon} ${bestClue.name}` : `📜 ${eraShort} · ${roleName}`;
+    }
+
+    if (tipEl) {
+      if (bestClue) {
+        tipEl.innerText = bestClue.gameplayTip;
+      } else {
+        const roleAction = this.state.roleType === 'bureaucrat' ? '制定合宜法規制度以保港稅' : (this.state.roleType === 'pioneer' ? '折衝部族盟約以守衛土地自主' : '做出關鍵商業抉擇以獲取高額貨銀');
+        tipEl.innerHTML = `👉 快去${dirDesc}<strong>【${targetLoc.name}】</strong>，${roleAction}！`;
+      }
+    }
+
+    if (loreEl) {
+      if (bestClue) {
+        loreEl.innerText = bestClue.historicalLore;
+      } else {
+        loreEl.innerText = currentNode.historicalContext || '📜 時代浪潮翻湧，把握歷史關鍵體制與商機，引領歷史前進！';
+      }
+    }
+
+    const secretNavBtn = document.getElementById('secret-modal-nav-btn');
+    if (secretNavBtn) {
+      const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+      secretNavBtn.innerHTML = `<span>🧭</span><span>僱嚮導帶路 (10${curUnit})</span>`;
+    }
+
+    const modal = document.getElementById('quest-secret-modal');
+    if (modal) modal.classList.remove('hidden');
+  }
+
+  // 自動尋路功能 (依據時代花費貨幣僱用嚮導引路)
   autoNavigateToCurrentQuest() {
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
     if (!currentNode) return;
@@ -3063,8 +4537,27 @@ class GameController {
     }
     if (!targetLoc) targetLoc = this.models.MAP_LOCATIONS[0];
 
+    const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    const curName = (this.currentEra && this.currentEra.currencyName) || '銀兩';
+    const guideName = this.currentEraId === 'era_01_prehistory' ? '部落嚮導' : '挑夫嚮導';
+    const GUIDE_FEE = 10;
+
+    if (this.state.silver < GUIDE_FEE) {
+      if (window.soundFx) window.soundFx.playCritical();
+      this.addFloatingText(this.hero.x, this.hero.y - 45, `${curName}不足 10 ${curUnit}！`, '#f87171', 18);
+      this.showToast(`⚠️ ${curName}不足（尋路需 ${GUIDE_FEE} ${curUnit}）！${guideName}不願帶路，請免費查閱【📜 情報秘笈】親自前往！`, 4000);
+      setTimeout(() => this.openQuestSecretModal(), 500);
+      return;
+    }
+
+    // 扣除費用並飄字通知
+    this.state.silver -= GUIDE_FEE;
+    this.renderHUD();
+    if (window.soundFx) window.soundFx.playCoin();
+    this.addFloatingText(this.hero.x, this.hero.y - 40, `-${GUIDE_FEE} ${curUnit} (僱${guideName})`, '#facc15', 18);
+
     this.setNavTarget(targetLoc.doorX, targetLoc.doorY, targetLoc.name);
-    this.showToast(`🧭 自動尋路中：前往【${targetLoc.name}】做出歷史抉擇`);
+    this.showToast(`🧭 ${guideName}引路中（耗費 ${GUIDE_FEE} ${curUnit}）：前往【${targetLoc.name}】做出歷史抉擇`);
   }
 
   autoNavigateToLocation(locId) {
@@ -3289,8 +4782,9 @@ class GameController {
         this.hero.y = 260;
       }
       this.hero.navTarget = null;
-      this.addFloatingText(this.hero.x, this.hero.y - 35, '🏡 返回承恩宅邸', '#22c55e', 18);
-      this.showToast('🏡 已順利返回自家承恩宅邸！');
+      const homeName = (this.currentEra && this.currentEra.homeName) || '居所';
+      this.addFloatingText(this.hero.x, this.hero.y - 35, `🛖 返回${homeName}`, '#22c55e', 18);
+      this.showToast(`🛖 已順利返回${homeName}！`);
       setTimeout(() => this.showHomeModal(), 400);
     }
   }
@@ -3302,11 +4796,16 @@ class GameController {
     const option = node.options[optionIndex];
     if (!option) return;
 
+    const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    const curName = (this.currentEra && this.currentEra.currencyName) || '銀兩';
+    const workName = (this.currentEra && this.currentEra.workActionName) || '碼頭打工';
+
     // 檢查本金 (無阻塞友善引導，避免醜陋 alert)
-    if (this.state.silver < option.baseCost) {
-      const shortage = option.baseCost - this.state.silver;
-      this.showToast(`⚠️ 本金不足！尚缺 ${shortage} 兩，已為您自動導航至碼頭打工`);
-      this.addFloatingText(this.hero.x, this.hero.y - 45, `本金不足！尚缺 ${shortage} 兩`, '#f87171', 20);
+    const baseCost = option.baseCost || 0;
+    if (this.state.silver < baseCost) {
+      const shortage = baseCost - this.state.silver;
+      this.showToast(`⚠️ 本金不足！尚缺 ${shortage} ${curUnit}，已為您自動導向【${workName}】`, 4000);
+      this.addFloatingText(this.hero.x, this.hero.y - 45, `本金不足！尚缺 ${shortage} ${curUnit}`, '#f87171', 20);
       this.autoNavigateToLocation('loc_dock');
       this.hideZonePromptBubble();
       return;
@@ -3315,7 +4814,7 @@ class GameController {
     this.hideZonePromptBubble();
 
     // 扣除本金
-    this.state.silver -= option.baseCost;
+    this.state.silver -= baseCost;
 
     // 走錯路致死判定 (私渡暗巷)
     if (option.isFatalDeath) {
@@ -3326,34 +4825,41 @@ class GameController {
     }
 
     // 計算暴擊率
-    let critRate = option.criticalChance;
+    let critRate = option.criticalChance || 0.25;
     if (this.state.inventoryCollectibles.includes('relic_formosa_tea_box')) {
       critRate += 0.10;
     }
 
     const isCrit = Math.random() < critRate;
-    let profit = option.baseSilverReward;
+    const baseReward = option.baseSilverReward !== undefined ? option.baseSilverReward : (option.baseReward || 0);
+    let profit = baseReward;
     let multiplierText = '標準結算';
 
     if (isCrit) {
-      profit = Math.round(option.baseSilverReward * option.criticalMultiplier);
-      multiplierText = `時代暴擊 x${option.criticalMultiplier}！`;
+      profit = Math.round(baseReward * (option.criticalMultiplier || 1.5));
+      multiplierText = `時代暴擊 x${option.criticalMultiplier || 1.5}！`;
       if (window.soundFx) window.soundFx.playCritical();
       this.coinVFX.burst(window.innerWidth / 2, window.innerHeight / 2, 50);
       this.triggerCritBanner();
-      this.addFloatingText(this.hero.x, this.hero.y - 50, `💥 暴擊 +${profit} 兩！`, '#ef4444', 24);
+      this.addFloatingText(this.hero.x, this.hero.y - 50, `💥 暴擊 +${profit} ${curUnit}！`, '#ef4444', 24);
     } else {
       if (window.soundFx) window.soundFx.playCoin();
       this.coinVFX.burst(window.innerWidth / 2, window.innerHeight / 2, 25);
-      this.addFloatingText(this.hero.x, this.hero.y - 50, `+${profit} 兩`, '#facc15', 20);
+      this.addFloatingText(this.hero.x, this.hero.y - 50, `+${profit} ${curUnit}`, '#facc15', 20);
     }
 
     this.state.silver += profit;
     if (option.effects) {
-      if (option.effects.reputationDelta) this.state.reputation += option.effects.reputationDelta;
-      if (option.effects.knowledgeDelta) this.state.knowledge += option.effects.knowledgeDelta;
-      if (option.effects.gainCollectibleId && !this.state.inventoryCollectibles.includes(option.effects.gainCollectibleId)) {
-        this.state.inventoryCollectibles.push(option.effects.gainCollectibleId);
+      if (option.effects.reputationDelta) {
+        this.state.reputation += option.effects.reputationDelta;
+        this.syncMasterProgress(option.effects.reputationDelta, 0);
+      }
+      if (option.effects.knowledgeDelta) {
+        this.state.knowledge += option.effects.knowledgeDelta;
+        this.syncMasterProgress(0, option.effects.knowledgeDelta);
+      }
+      if (option.effects.gainCollectibleId) {
+        this.rewardCollectible(option.effects.gainCollectibleId);
       }
     }
 
@@ -3363,7 +4869,7 @@ class GameController {
 
     this.state.choiceHistory.push({
       nodeTitle: node.title,
-      optionText: option.text,
+      optionText: option.text || option.actionText || '',
       isHistorical: option.isHistorical,
       profit: profit,
       isCrit: isCrit,
@@ -3388,33 +4894,84 @@ class GameController {
     const modal = document.getElementById('consequence-modal');
     if (!modal) return;
 
-    document.getElementById('cons-title').innerText = option.isHistorical ? '【順應時代潮流 · 簽署合約】' : '【架空歷史分岔】';
-    document.getElementById('cons-title').className = option.isHistorical ? 'text-lg font-bold text-emerald-400' : 'text-lg font-bold text-amber-400';
-    document.getElementById('cons-narrative').innerText = option.consequence.narrative;
+    if (option.isHistorical) {
+      if (this.state.roleType === 'bureaucrat') {
+        document.getElementById('cons-title').innerText = '【順應時代法制 · 頒布施行】';
+      } else if (this.state.roleType === 'pioneer') {
+        document.getElementById('cons-title').innerText = '【確立部族盟約 · 守護權益】';
+      } else {
+        document.getElementById('cons-title').innerText = '【順應時代潮流 · 簽署合約】';
+      }
+      document.getElementById('cons-title').className = 'text-lg font-bold text-emerald-400';
+    } else {
+      if (this.state.roleType === 'bureaucrat') {
+        document.getElementById('cons-title').innerText = '【法制失序 · 歷史警示】';
+      } else if (this.state.roleType === 'pioneer') {
+        document.getElementById('cons-title').innerText = '【部族衝擊 · 歷史警示】';
+      } else {
+        document.getElementById('cons-title').innerText = '【架空歷史分岔】';
+      }
+      document.getElementById('cons-title').className = 'text-lg font-bold text-amber-400';
+    }
+
+    document.getElementById('cons-narrative').innerText = option.consequence ? (option.consequence.narrative || '') : '';
 
     const loreBox = document.getElementById('cons-lore');
     if (option.isHistorical) {
-      loreBox.innerText = option.consequence.historicalOutcome;
+      loreBox.innerText = option.consequence ? (option.consequence.historicalOutcome || option.consequence.historicalFactSummary || '') : '';
       loreBox.className = 'p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-200 text-xs sm:text-sm leading-relaxed';
     } else {
-      loreBox.innerText = option.consequence.ifOutcome;
+      loreBox.innerText = option.consequence ? (option.consequence.ifOutcome || option.consequence.hypotheticalOutcome || option.consequence.historicalOutcome || '') : '';
       loreBox.className = 'p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 text-amber-200 text-xs sm:text-sm leading-relaxed';
     }
 
+    const currency = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    const profitLabel = this.state.roleType === 'bureaucrat' ? '港稅庫銀成長：' : (this.state.roleType === 'pioneer' ? '部落資產盈餘：' : '實質入袋收益：');
+
     document.getElementById('cons-profit').innerHTML = `
-      <span class="text-slate-300 text-xs">實質入袋收益：</span>
-      <span class="text-amber-400 font-extrabold text-xl font-mono">+${profit} 兩</span>
+      <span class="text-slate-300 text-xs">${profitLabel}</span>
+      <span class="text-amber-400 font-extrabold text-xl font-mono">+${profit} ${currency}</span>
       <span class="text-[10px] px-2 py-0.5 rounded-full ${isCrit ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-700 text-slate-300'}">${multiplierText}</span>
     `;
 
     const nextBtn = document.getElementById('cons-next-btn');
     nextBtn.onclick = () => {
       this.closeModal('consequence-modal');
+      
+      const hasExamCard = (window.TAIWAN_HISTORY_CURRICULUM && 
+          window.TAIWAN_HISTORY_CURRICULUM.renderExamPrepReportCard && 
+          window.TAIWAN_HISTORY_CURRICULUM.CHARACTERS[this.state.identityId]);
+
       if (option.nextNodeId === 'node_settlement') {
-        this.renderSettlementReport();
+        this.state.currentNodeId = 'node_settlement';
+        this.hideZonePromptBubble();
+        if (hasExamCard) {
+          // 先展示 108 課綱段考考點速記卡，點擊關閉後無縫開啟結算戰報卡
+          window.TAIWAN_HISTORY_CURRICULUM.renderExamPrepReportCard(this.state.identityId, option, () => {
+            this.renderSettlementReport();
+          });
+        } else {
+          this.renderSettlementReport();
+        }
       } else if (this.models.EVENT_NODES[option.nextNodeId]) {
         this.state.currentNodeId = option.nextNodeId;
+        // 每次進入下一關，英雄回到起始點 (中間 700, 420)，不直接幫玩家移動到要去的位置
+        this.hero.x = 700;
+        this.hero.y = 420;
+        this.hero.vx = 0;
+        this.hero.vy = 0;
+        this.hero.isMoving = false;
+        this.hero.navTarget = null;
+        this.saveActiveSession();
         this.renderHUD();
+        this.hideZonePromptBubble();
+        const vW = this.viewWidth || window.innerWidth;
+        const vH = this.viewHeight || window.innerHeight;
+        this.camera.x = 700 - vW / 2;
+        this.camera.y = 420 - vH / 2;
+        if (hasExamCard) {
+          window.TAIWAN_HISTORY_CURRICULUM.renderExamPrepReportCard(this.state.identityId, option);
+        }
       }
     };
 
@@ -3429,12 +4986,76 @@ class GameController {
     if (!modal) return;
     modal.classList.remove('hidden');
 
-    const cargoList = [
-      { id: 'tea', name: '深坑烏龍茶簍', icon: '🍵', hint: '香氣芬芳 · 時代核心' },
-      { id: 'cloth', name: '內地棉麻布疋', icon: '🧵', hint: '商賈日常 · 必備民生' },
-      { id: 'sugar', name: '打狗赤砂糖罐', icon: '🍯', hint: '傳統糖郊 · 甜潤可口' },
-      { id: 'camphor', name: '三峽腦木碎屑', icon: '🪵', hint: '樟腦提神 · 外銷特產' }
-    ];
+    const titleEl = document.getElementById('minigame-title');
+    const descEl = document.getElementById('minigame-desc');
+    const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    const workName = (this.currentEra && this.currentEra.workActionName) || '打工';
+
+    let cargoList = [];
+    if (this.currentEraId === 'era_01_prehistory') {
+      if (titleEl) titleEl.innerText = '卑南聚落 · 工藝理貨打工';
+      if (descEl) descEl.innerHTML = `族人長老正忙著整理聚落要用於交換的石器、陶器與海外珍寶。請點擊清點 <strong>3 份物資</strong>，即可換取 30 ${curUnit}工資並探聽最新部落情報！`;
+      cargoList = [
+        { id: 'jade', name: '卑南臺灣玉玦', icon: '📿', hint: '豐田翠玉 · 交換至寶' },
+        { id: 'pottery', name: '細繩紋紅陶罐', icon: '🏺', hint: '粗砂紅陶 · 聚落日常' },
+        { id: 'iron', name: '十三行鐵斧鋌', icon: '🗡️', hint: '高溫煉鐵 · 鋒利工具' },
+        { id: 'bead', name: '越洋瑪瑙珠飾', icon: '🔮', hint: '海外舶來 · 貴重交換' }
+      ];
+    } else if (this.currentEraId === 'era_02_international' || this.currentEraId === 'era_1642_voc') {
+      if (titleEl) titleEl.innerText = '熱蘭遮商館 · 碼頭理貨打工';
+      if (descEl) descEl.innerHTML = `荷蘭商館苦力正忙著將鹿皮與蔗糖裝箱裝船。請點擊清點 <strong>3 箱商貨</strong>，即可換取 30 ${curUnit}工資並探聽最新商情！`;
+      cargoList = [
+        { id: 'deerskin', name: '平埔生鹿皮包', icon: '🦌', hint: '日本搶手 · 外銷主力' },
+        { id: 'sugar', name: '赤崁粗砂糖桶', icon: '🍯', hint: '荷蘭專賣 · 甜潤厚利' },
+        { id: 'pepper', name: '南洋丁香胡椒', icon: '🌿', hint: '巴達維亞 · 香料轉口' },
+        { id: 'silver', name: '荷蘭通商里爾', icon: '🪙', hint: '大員流通 · 官定銀幣' }
+      ];
+    } else if (this.currentEraId === 'era_03_zheng_ming') {
+      if (titleEl) titleEl.innerText = '安平軍屯港 · 輜重理貨打工';
+      if (descEl) descEl.innerHTML = `軍屯水師正在清點各鎮屯田儲糧與海外走私物資。請點擊清點 <strong>3 份物資</strong>，即可換取 30 ${curUnit}餉銀並探聽最新商情！`;
+      cargoList = [
+        { id: 'grain', name: '屯墾白米糧草', icon: '🌾', hint: '寓兵於農 · 自給自足' },
+        { id: 'coin', name: '東寧通寶銅錢', icon: '🪙', hint: '鄭氏官鑄 · 海內通行' },
+        { id: 'sugar', name: '外銷日本白糖', icon: '🍯', hint: '對日貿易 · 籌措軍費' },
+        { id: 'ironware', name: '漳泉鐵鑄農具', icon: '⚒️', hint: '開闢荒野 · 墾殖重器' }
+      ];
+    } else if (this.currentEraId === 'era_04_early_qing') {
+      if (titleEl) titleEl.innerText = '鹿港泉郊港 · 渡船理貨打工';
+      if (descEl) descEl.innerHTML = `行郊碼頭工人正在清點往來一府二鹿的行郊商貨。請點擊清點 <strong>3 箱商貨</strong>，即可換取 30 ${curUnit}工資並探聽最新商情！`;
+      cargoList = [
+        { id: 'cloth', name: '泉州染織布疋', icon: '🧵', hint: '頂郊進口 · 內山搶手' },
+        { id: 'rice', name: '彰化平原稻米', icon: '🌾', hint: '一府二鹿 · 濟銷閩粵' },
+        { id: 'sugar', name: '糖郊精製白糖', icon: '🍯', hint: '三郊專營 · 穩健利潤' },
+        { id: 'peanut', name: '笨港花生油麻', icon: '🫒', hint: '榨油作坊 · 民生要宗' }
+      ];
+    } else if (this.currentEraId === 'era_06_japanese_rule' || this.currentEraId === 'era_1920_modern') {
+      if (titleEl) titleEl.innerText = '基隆築港 · 鐵道理貨打工';
+      if (descEl) descEl.innerHTML = `鐵道縱貫線與基隆海運棧橋正忙著裝卸近代專賣物資。請點擊清點 <strong>3 箱商貨</strong>，即可換取 30 ${curUnit}日薪並探聽最新商情！`;
+      cargoList = [
+        { id: 'rice', name: '蓬萊米穀標準袋', icon: '🍚', hint: '磯永吉培育 · 輸日大宗' },
+        { id: 'sugar', name: '新式製糖特砂', icon: '🍬', hint: '新興製糖 · 現代產業' },
+        { id: 'cypress', name: '阿里山檜木方料', icon: '🪵', hint: '官營林業 · 貴重用材' },
+        { id: 'newspaper', name: '臺灣民報報捆', icon: '📰', hint: '蔣渭水呼號 · 民智啟蒙' }
+      ];
+    } else if (this.currentEraId === 'era_07_contemporary') {
+      if (titleEl) titleEl.innerText = '竹科研發物流港 · 晶圓理貨檢驗';
+      if (descEl) descEl.innerHTML = `高科技園區物流倉正忙著檢驗半導體晶圓與外銷精密元件。請點擊檢驗 <strong>3 批晶圓</strong>，即可換取 30 ${curUnit}津貼並探聽最新產業情報！`;
+      cargoList = [
+        { id: 'wafer', name: '積體電路矽晶圓', icon: '💿', hint: '半導體奇蹟 · 護國神山' },
+        { id: 'textile', name: '機能高科技紡織', icon: '👕', hint: '加工出口 · 創匯功臣' },
+        { id: 'electronics', name: '光電顯示器模組', icon: '💻', hint: '資訊島嶼 · 關鍵零組件' },
+        { id: 'sorghum', name: '金門陳年高粱酒', icon: '🍶', hint: '戰地戰略 · 經典佳釀' }
+      ];
+    } else {
+      if (titleEl) titleEl.innerText = '大稻埕碼頭 · 茶商理貨打工';
+      if (descEl) descEl.innerHTML = `碼頭苦力正忙著將北臺灣各處運抵的商貨裝船。請點擊清點 <strong>3 箱商貨</strong>，即可換取 30 ${curUnit}工資並探聽最新商情！`;
+      cargoList = [
+        { id: 'tea', name: '深坑烏龍茶簍', icon: '🍵', hint: '香氣芬芳 · 時代核心' },
+        { id: 'cloth', name: '內地棉麻布疋', icon: '🧵', hint: '商賈日常 · 必備民生' },
+        { id: 'sugar', name: '打狗赤砂糖罐', icon: '🍯', hint: '傳統糖郊 · 甜潤可口' },
+        { id: 'camphor', name: '三峽腦木碎屑', icon: '🪵', hint: '樟腦提神 · 外銷特產' }
+      ];
+    }
 
     const container = document.getElementById('minigame-cargos');
     container.innerHTML = cargoList.map(item => `
@@ -3446,7 +5067,7 @@ class GameController {
       </button>
     `).join('');
 
-    document.getElementById('minigame-progress-text').innerText = `剩餘理貨目標：${this.minigameClicksLeft} 箱`;
+    document.getElementById('minigame-progress-text').innerText = `剩餘理貨目標：${this.minigameClicksLeft} 份`;
   }
 
   clickMinigameCargo(cargoId) {
@@ -3456,16 +5077,19 @@ class GameController {
 
     if (window.soundFx) window.soundFx.playCoin();
     this.minigameClicksLeft--;
-    document.getElementById('minigame-progress-text').innerText = `剩餘理貨目標：${Math.max(0, this.minigameClicksLeft)} 箱`;
+    document.getElementById('minigame-progress-text').innerText = `剩餘理貨目標：${Math.max(0, this.minigameClicksLeft)} 份`;
 
     if (this.minigameClicksLeft <= 0) {
       setTimeout(() => {
         this.closeModal('minigame-modal');
-        this.rewardClue('clue_dadaocheng_tea');
+        const defaultClueId = (this.currentPerspective && this.currentPerspective.startingClueId) || (this.currentEraId === 'era_01_prehistory' ? 'clue_peinan_jade' : 'clue_dadaocheng_tea');
+        this.rewardClue(defaultClueId);
+        const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+        const workName = (this.currentEra && this.currentEra.workActionName) || '打工';
         this.state.silver += 30; // 工資入袋
         this.renderHUD();
-        this.showToast('🎉 理貨完成！獲得 30 兩工資與【大稻埕烏龍茶秘笈】');
-        this.addFloatingText(this.hero.x, this.hero.y - 45, '+30 兩打工資！', '#facc15', 22);
+        this.showToast(`🎉 ${workName}完成！獲得 30 ${curUnit}工資與情報秘笈`);
+        this.addFloatingText(this.hero.x, this.hero.y - 45, `+30 ${curUnit}！`, '#facc15', 22);
       }, 400);
     }
   }
@@ -3477,12 +5101,30 @@ class GameController {
     if (!this.state.unlockedClues.includes(clueId)) {
       this.state.unlockedClues.push(clueId);
       this.state.knowledge += 15;
+      this.syncMasterProgress(0, 15);
     }
 
     if (window.soundFx) window.soundFx.playLevelUp();
     this.coinVFX.burst(window.innerWidth / 2, window.innerHeight / 2, 25);
     this.showClueModal(clue);
     this.renderHUD();
+  }
+
+  rewardCollectible(relicId) {
+    const relic = this.models.COLLECTIBLE_DATABASE[relicId];
+    if (!relic) return;
+    if (!this.playerMaster.masterRelics.includes(relicId)) {
+      this.playerMaster.masterRelics.push(relicId);
+      this.syncMasterProgress(20, 20); // 獲得奇物給予歷史總聲望與閱歷大加成！
+      if (window.soundFx) window.soundFx.playLevelUp();
+      this.coinVFX.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
+      this.showToast(`🎉 獲得時代奇物【${relic.name}】！已收錄於行囊圖鑑！`);
+      this.addFloatingText(this.hero.x, this.hero.y - 65, `🎁 獲得奇物：${relic.name}`, '#c084fc', 22);
+    }
+    if (!this.state.inventoryCollectibles.includes(relicId)) {
+      this.state.inventoryCollectibles.push(relicId);
+      this.renderHUD();
+    }
   }
 
   showClueModal(clue) {
@@ -3515,6 +5157,8 @@ class GameController {
   }
 
   renderSettlementReport() {
+    this.state.currentNodeId = 'node_settlement';
+    this.hideZonePromptBubble();
     if (window.soundFx) window.soundFx.playLevelUp();
     this.coinVFX.burst(window.innerWidth / 2, window.innerHeight / 2, 60);
 
@@ -3522,24 +5166,136 @@ class GameController {
     if (!modal) return;
 
     let rank = 'B';
-    let title = '北臺灣務實坐賈';
-    if (this.state.silver >= 700 && this.state.historicalDecisionsCount >= 2) {
+    let title = `${this.state.identityTitle} · 穩健歷練`;
+    if (this.state.silver >= 600 && this.state.historicalDecisionsCount >= 2) {
       rank = 'S';
-      title = '北臺灣茶業傳奇巨擘';
-    } else if (this.state.silver >= 400 || this.state.historicalDecisionsCount >= 1) {
+      title = `${this.state.identityTitle} · 時代傳奇巨擘`;
+    } else if (this.state.silver >= 350 || this.state.historicalDecisionsCount >= 1) {
       rank = 'A';
-      title = '大稻埕新興茶行領袖';
+      title = `${this.state.identityTitle} · 歷史中流砥柱`;
     }
+
+    // 通關破關記錄與本尊歷史總聲望/閱歷大躍升
+    if (this.playerMaster) {
+      if (!this.playerMaster.completedPerspectives.includes(this.state.identityId)) {
+        this.playerMaster.completedPerspectives.push(this.state.identityId);
+      }
+
+      // 嚴格檢查：當前年代的所有角色視角是否皆已全部通關！
+      const currentEraPerspectives = this.currentEra ? this.currentEra.perspectives : [];
+      const totalPerspectiveCount = currentEraPerspectives.length;
+      const completedThisEraCount = currentEraPerspectives.filter(p => this.playerMaster.completedPerspectives.includes(p.id)).length;
+      const allPerspectivesDone = totalPerspectiveCount > 0 && completedThisEraCount === totalPerspectiveCount;
+
+      if (allPerspectivesDone && !this.playerMaster.completedEras.includes(this.currentEraId)) {
+        this.playerMaster.completedEras.push(this.currentEraId);
+        // 自動解鎖下一時代篇章
+        const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
+        if (curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length) {
+          const nextEra = this.models.HISTORICAL_ERAS[curEraIdx + 1];
+          if (!this.playerMaster.unlockedEras.includes(nextEra.id)) {
+            this.playerMaster.unlockedEras.push(nextEra.id);
+          }
+        }
+        this.syncMasterProgress(50, 50); // 全角色大滿貫通關大獎勵！
+        this.showToast(`🏆 榮耀大滿貫！已完成【${this.currentEra.title}】全部 ${totalPerspectiveCount} 位角色演繹！解鎖下一歷史篇章！`, 4500);
+      } else {
+        this.syncMasterProgress(20, 20);
+        if (allPerspectivesDone) {
+          this.showToast(`✅ 恭喜再次重溫並完成【${this.state.identityName}】的歷史演繹！`);
+        } else {
+          this.showToast(`✅ 恭喜完成【${this.state.identityName}】！本篇章進度 (${completedThisEraCount}/${totalPerspectiveCount})，通關全部 ${totalPerspectiveCount} 位角色即可解鎖下一時代！`, 4000);
+        }
+      }
+      this.saveActiveSession();
+    }
+
+    const reportEraTag = document.getElementById('report-era-tag');
+    if (reportEraTag && this.currentEra) {
+      reportEraTag.innerText = `${this.currentEra.year} · ${this.currentEra.title} 史實輪迴戰報`;
+    }
+
+    const reportSub = document.getElementById('report-master-sub');
+    if (reportSub && this.currentEra) {
+      reportSub.innerText = `本尊行者：${this.playerMaster ? this.playerMaster.name : '林晨恩'} ｜ 結算時代：${this.currentEra.year}`;
+    }
+
+    const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    const curName = (this.currentEra && this.currentEra.currencyName) || '銀兩';
+    const silverLabel = document.getElementById('report-silver-label');
+    if (silverLabel) silverLabel.innerText = `總累積${curName}`;
+
+    const repLabel = document.getElementById('report-rep-label');
+    if (repLabel) repLabel.innerText = this.currentEraId === 'era_01_prehistory' ? '部落氏族聲望' : '時代歷史聲望';
 
     document.getElementById('report-rank').innerText = rank;
     document.getElementById('report-title').innerText = title;
-    document.getElementById('report-silver').innerText = `${this.state.silver} 兩`;
-    document.getElementById('report-reputation').innerText = `${this.state.reputation} 點`;
-    document.getElementById('report-knowledge').innerText = `${this.state.knowledge} 點`;
-    document.getElementById('report-collectibles').innerText = `${this.state.inventoryCollectibles.length} 件`;
+    document.getElementById('report-silver').innerText = `${this.state.silver} ${curUnit}`;
+    document.getElementById('report-reputation').innerText = `${this.playerMaster ? this.playerMaster.totalReputation : this.state.reputation} 點 (總)`;
+    document.getElementById('report-knowledge').innerText = `${this.playerMaster ? this.playerMaster.totalKnowledge : this.state.knowledge} 點 (總)`;
+    document.getElementById('report-collectibles').innerText = `${this.playerMaster ? this.playerMaster.masterRelics.length : this.state.inventoryCollectibles.length} 件`;
 
-    const summaryText = `在19世紀中後期的開港大潮中，你以見習茶商之姿順應「福爾摩沙烏龍茶」直銷歐美之歷史洪流，累計完成 ${this.state.choiceHistory.length} 次關鍵決策，達成 ${Math.round((this.state.historicalDecisionsCount / Math.max(1, this.state.choiceHistory.length)) * 100)}% 史實關鍵節點吻合率！`;
+    // 根據視角呈現深入歷史總結
+    let perspectiveLoreSummary = '';
+    if (this.currentEraId === 'era_01_prehistory') {
+      perspectiveLoreSummary = `在【舊石器至史前時代】的歲月中，你以【${this.state.identityTitle}】之身刻劃部落基業，見證從打製石器、玉石琢磨到高溫煉鐵的文明進程！`;
+    } else if (this.state.roleType === 'bureaucrat') {
+      perspectiveLoreSummary = `在【${this.currentEra.title}】的風雲變幻中，你以【行政官員】視角秉公執法、調解衝突，維護了法紀與財政大局！`;
+    } else if (this.state.roleType === 'civilian') {
+      perspectiveLoreSummary = `在【${this.currentEra.title}】的時代浪潮中，你以【平民工匠/商人】視角抓緊商機、勤勉奮鬥，成功在時代舞台中站穩腳跟！`;
+    } else {
+      perspectiveLoreSummary = `在【${this.currentEra.title}】的重大歷史轉折點上，你以【時代先鋒人物】視角引領潮流、突破困境，留下深遠的時代印記！`;
+    }
+
+    // 計算當前章節全角色完成進度
+    const eraPerspectives = this.currentEra ? this.currentEra.perspectives : [];
+    const eraDoneCount = eraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id)).length;
+    const isEraAllCompleted = eraPerspectives.length > 0 && eraDoneCount === eraPerspectives.length;
+
+    let transitionLore = '';
+    if (this.currentEraId === 'era_01_prehistory') {
+      if (!isEraAllCompleted) {
+        transitionLore = `\n⏳ 史前文化長河指引：本篇章涵蓋「舊石器長濱」、「新石器卑南玉器」與「金屬器十三行煉鐵」。請依序演繹各階段先民角色，完整親歷數千年島嶼史前文明演進！`;
+      } else {
+        transitionLore = `\n📜 跨入信史新章：恭喜完整體驗島嶼史前三大文化階段！臺灣歷史即將揮別史前時代，迎來 17 世紀大航海時代的信史篇章！`;
+      }
+    }
+
+    const summaryText = `${perspectiveLoreSummary} 累計完成 ${this.state.choiceHistory.length} 次重大歷史決策，達成 ${Math.round((this.state.historicalDecisionsCount / Math.max(1, this.state.choiceHistory.length)) * 100)}% 史實關鍵節點吻合率！\n👑 本年代演繹進度：【${eraDoneCount} / ${eraPerspectives.length} 位角色】${isEraAllCompleted ? '（已全面破關解鎖下一篇章！）' : `（需將本篇章全部角色皆通關，方可跨入下一歷史時代）`}${transitionLore}`;
     document.getElementById('report-summary').innerText = summaryText;
+
+    // 動態更新「切換本年代下一視角」按鈕
+    const switchBtn = document.getElementById('btn-switch-perspective');
+    if (switchBtn && this.currentEra) {
+      const curIdx = this.currentEra.perspectives.findIndex(p => p.id === this.state.identityId);
+      const nextP = this.currentEra.perspectives[(curIdx + 1) % this.currentEra.perspectives.length];
+      const isNextDone = this.playerMaster && this.playerMaster.completedPerspectives.includes(nextP.id);
+      let btnLabel = '';
+      if (this.currentEraId === 'era_01_prehistory') {
+        if (nextP.id === 'peinan_artisan') btnLabel = `👉 探索下一史前階段：【卑南玉工長老 · 新石器玉玦】`;
+        else if (nextP.id === 'shisanhang_smith') btnLabel = `👉 探索下一史前階段：【十三行鐵匠 · 金屬器時代】`;
+        else if (nextP.id === 'amis_elder') btnLabel = `👉 探索南島社會：【阿美族長老 · 原住民組織】`;
+        else btnLabel = `${isNextDone ? '重溫' : '接續演繹'}【${nextP.name} · ${nextP.title}】`;
+      } else {
+        btnLabel = `${isNextDone ? '重溫' : '接續演繹'}【${nextP.name} · ${nextP.title}】`;
+      }
+      switchBtn.innerHTML = `<span>🔀</span><span>${btnLabel}</span>`;
+    }
+
+    // 動態更新「下一時代按鈕」：若本年代未全破，置灰鎖定並明確提示
+    const nextEraBtn = document.getElementById('btn-next-era');
+    if (nextEraBtn) {
+      const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
+      const nextEra = this.models.HISTORICAL_ERAS[(curEraIdx + 1) % this.models.HISTORICAL_ERAS.length];
+      if (isEraAllCompleted) {
+        nextEraBtn.className = "w-full sm:flex-1 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-sm sm:text-base shadow-xl flex items-center justify-center gap-1.5 transition-transform active:scale-95 cursor-pointer";
+        const nextTitle = this.currentEraId === 'era_01_prehistory' ? `跨入信史時期！啟程【${nextEra.year} ${nextEra.title.split('・')[0]}】` : `解鎖！啟程【${nextEra.year} ${nextEra.title.split('・')[0]}】`;
+        nextEraBtn.innerHTML = `<span>⏩</span><span>${nextTitle}</span>`;
+      } else {
+        nextEraBtn.className = "w-full sm:flex-1 py-3.5 rounded-xl bg-slate-800 text-slate-400 font-bold text-xs sm:text-sm border border-white/10 flex items-center justify-center gap-1.5 cursor-not-allowed";
+        nextEraBtn.innerHTML = `<span>🔒</span><span>下個年代未解鎖 (${eraDoneCount}/${eraPerspectives.length}角色)</span>`;
+      }
+    }
 
     modal.classList.remove('hidden');
   }
@@ -3550,23 +5306,76 @@ class GameController {
     const currentOutfitObj = this.models.HOME_OUTFITS ? this.models.HOME_OUTFITS.find(o => o.id === this.state.currentOutfit) : null;
 
     const hudAvatar = document.getElementById('hud-avatar');
-    if (hudAvatar) hudAvatar.innerText = currentOutfitObj ? currentOutfitObj.avatar : tier.avatarArt;
-    const hudName = document.getElementById('hud-name');
-    if (hudName) hudName.innerText = this.state.identityName;
-    const hudTier = document.getElementById('hud-tier');
-    if (hudTier) hudTier.innerText = currentOutfitObj ? currentOutfitObj.name : tier.name;
+    if (hudAvatar) hudAvatar.innerText = (this.currentPerspective && this.currentPerspective.avatar) || this.state.avatar || '🧭';
+
+    // 1. 本尊主要身份 (林晨恩，貫穿全場、跨時代累積)
+    const masterName = document.getElementById('hud-master-name');
+    if (masterName) masterName.innerText = this.playerMaster ? this.playerMaster.name : '林晨恩';
+
+    const totalPts = ((this.playerMaster && this.playerMaster.totalReputation) || 0) + ((this.playerMaster && this.playerMaster.totalKnowledge) || 0);
+    const masterTiers = this.models.MASTER_PROGRESSION_TIERS || [];
+    let currentMasterTier = masterTiers[0];
+    for (const t of masterTiers) {
+      if (totalPts >= t.minPoints) currentMasterTier = t;
+    }
+    const masterTierEl = document.getElementById('hud-master-tier');
+    if (masterTierEl && currentMasterTier) {
+      masterTierEl.innerText = `${currentMasterTier.badge} Lv.${currentMasterTier.level}`;
+    }
+
+    // 2. 第二身份 (當前時代扮演角色)
+    const hudRoleBadge = document.getElementById('hud-role-badge');
+    if (hudRoleBadge) {
+      hudRoleBadge.innerText = `🎭 ${this.state.identityName} (${this.state.identityTitle})`;
+    }
+
+    const hudRep = document.getElementById('hud-reputation');
+    if (hudRep) hudRep.innerText = this.playerMaster ? this.playerMaster.totalReputation : this.state.reputation;
+    const hudKnow = document.getElementById('hud-knowledge');
+    if (hudKnow) hudKnow.innerText = this.playerMaster ? this.playerMaster.totalKnowledge : this.state.knowledge;
+    const hudRelic = document.getElementById('hud-relic-count');
+    if (hudRelic) hudRelic.innerText = `${this.playerMaster ? this.playerMaster.masterRelics.length : this.state.inventoryCollectibles.length} 件`;
 
     const homeBadge = document.getElementById('hud-home-level-badge');
     if (homeBadge) homeBadge.innerText = `Lv.${this.state.homeLevel || 1}`;
 
+    // 當前年代專屬貨幣與住宅名稱更新
+    const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    const curName = (this.currentEra && this.currentEra.currencyName) || '行商銀兩';
+    const homeName = (this.currentEra && this.currentEra.homeName) || '承恩宅邸';
+    const homeDesc = (this.currentEra && this.currentEra.homeActionDesc) || '建造 · 換裝 · 收租 ▶';
+    const workName = (this.currentEra && this.currentEra.workActionName) || '碼頭打工';
+
+    const hudCurrencyName = document.getElementById('hud-currency-name');
+    if (hudCurrencyName) hudCurrencyName.innerText = curName;
+
     const hudSilver = document.getElementById('hud-silver');
-    if (hudSilver) hudSilver.innerText = `${this.state.silver} 兩`;
-    const hudRep = document.getElementById('hud-reputation');
-    if (hudRep) hudRep.innerText = this.state.reputation;
-    const hudKnow = document.getElementById('hud-knowledge');
-    if (hudKnow) hudKnow.innerText = this.state.knowledge;
-    const hudRelic = document.getElementById('hud-relic-count');
-    if (hudRelic) hudRelic.innerText = `${this.state.inventoryCollectibles.length} 件`;
+    if (hudSilver) hudSilver.innerText = `${this.state.silver} ${curUnit}`;
+
+    const hudHomeName = document.getElementById('hud-home-name');
+    if (hudHomeName) hudHomeName.innerText = homeName;
+
+    const hudHomeDesc = document.getElementById('hud-home-desc');
+    if (hudHomeDesc) hudHomeDesc.innerText = homeDesc;
+
+    // 地圖與打工小標籤動態更新
+    const minimapTitle = document.getElementById('minimap-title');
+    if (minimapTitle && this.currentEra && this.currentEra.minimapTitle) {
+      minimapTitle.innerText = this.currentEra.minimapTitle;
+    }
+    const minimapYear = document.getElementById('minimap-year-text');
+    if (minimapYear && this.currentEra && this.currentEra.minimapYearBadge) {
+      minimapYear.innerText = this.currentEra.minimapYearBadge;
+    }
+
+    const navBtnText = document.getElementById('nav-btn-text');
+    if (navBtnText) navBtnText.innerText = `尋路 (10${curUnit})`;
+
+    const hintWorkText = document.getElementById('hint-work-text');
+    if (hintWorkText) hintWorkText.innerText = workName;
+
+    const skillDockLabel = document.getElementById('skill-dock-label');
+    if (skillDockLabel) skillDockLabel.innerText = `${workName.slice(0, 2)} [L]`;
 
     const quickClueBadge = document.getElementById('quick-clue-badge');
     if (quickClueBadge) {
@@ -3574,22 +5383,111 @@ class GameController {
       quickClueBadge.className = this.state.unlockedClues.length > 0 ? 'text-xs px-2 py-0.5 rounded bg-emerald-500/30 text-emerald-300 font-bold' : 'text-xs px-2 py-0.5 rounded bg-amber-500/30 text-amber-300 font-bold';
     }
 
+    // 3. 頂部任務條排版 (安全容錯拆分，防止 undefined 異常中斷渲染)
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
-    if (currentNode) {
-      const eraTag = document.getElementById('quest-era-tag');
-      if (eraTag) eraTag.innerText = currentNode.era;
-      const titleText = document.getElementById('quest-title-text');
-      if (titleText) titleText.innerText = currentNode.title;
+    const eraTag = document.getElementById('quest-era-tag');
+    if (eraTag) {
+      if (currentNode && currentNode.era) {
+        const parts = currentNode.era.split(' · ');
+        eraTag.innerText = parts[0] || currentNode.era;
+      } else if (this.currentEra) {
+        eraTag.innerText = this.currentEra.year || '當前時代';
+      }
     }
+    const titleText = document.getElementById('quest-title-text');
+    if (titleText) {
+      titleText.innerText = currentNode ? currentNode.title : '操縱角色前往聚落工坊做出歷史決策！';
+    }
+
+    // 當前角色階段即時存檔 (確保刷新頁面進度不遺失)
+    this.saveActiveSession();
+  }
+
+  // 雙重身份檔案面板 (主體林晨恩 vs 時代扮演角色)
+  showIdentityModal() {
+    if (window.soundFx) window.soundFx.playClick();
+    const modal = document.getElementById('identity-modal');
+    if (!modal) return;
+
+    // 1. 本尊檔案
+    const masterNameEl = document.getElementById('id-master-name');
+    if (masterNameEl) masterNameEl.innerText = this.playerMaster.name || '林晨恩';
+
+    const totalPts = (this.playerMaster.totalReputation || 0) + (this.playerMaster.totalKnowledge || 0);
+    const tiers = this.models.MASTER_PROGRESSION_TIERS || [];
+    let currentTier = tiers[0];
+    for (const t of tiers) {
+      if (totalPts >= t.minPoints) currentTier = t;
+    }
+
+    const tierBadgeEl = document.getElementById('id-master-tier-badge');
+    if (tierBadgeEl && currentTier) {
+      tierBadgeEl.innerText = `${currentTier.name}`;
+      tierBadgeEl.className = `text-xs px-2.5 py-0.5 rounded-full bg-gradient-to-r ${currentTier.color} text-white font-black shadow`;
+    }
+
+    const repEl = document.getElementById('id-master-rep');
+    if (repEl) repEl.innerText = this.playerMaster.totalReputation;
+
+    const knowEl = document.getElementById('id-master-know');
+    if (knowEl) knowEl.innerText = this.playerMaster.totalKnowledge;
+
+    const relicsEl = document.getElementById('id-master-relics');
+    if (relicsEl) relicsEl.innerText = `${this.playerMaster.masterRelics ? this.playerMaster.masterRelics.length : 0} 件`;
+
+    const masterHomeLevel = (this.playerMaster && this.playerMaster.homeLevel) || this.state.homeLevel || 1;
+    const masterHomeEl = document.getElementById('id-master-home');
+    if (masterHomeEl) masterHomeEl.innerText = `Lv.${masterHomeLevel}`;
+
+    const erasEl = document.getElementById('id-master-eras');
+    if (erasEl) erasEl.innerText = `${this.playerMaster.completedEras ? this.playerMaster.completedEras.length : 0} / ${this.models.HISTORICAL_ERAS ? this.models.HISTORICAL_ERAS.length : 7}`;
+
+    // 2. 時代角色檔案 (隨時動態同步當前實際遊玩視角角色，絕不停留在舊角色)
+    const p = this.currentPerspective || 
+              (this.currentEra && this.currentEra.perspectives.find(x => x.id === this.state.identityId)) || 
+              (this.currentEra && this.currentEra.perspectives[0]);
+
+    const activeRoleBadge = (p && p.roleTypeBadge) || this.state.roleTypeBadge || '🎭 時代角色';
+    const activeTitle = (p && p.title) || this.state.identityTitle || '';
+    const activeName = (p && p.name) || this.state.identityName || '';
+    const activeAvatar = (p && p.avatar) || this.state.avatar || '🎭';
+    const activeGoal = (p && (p.briefGoal || p.missionObjective || p.perspectiveFocus)) || '';
+    const activeSubEra = (p && (p.subEraYear || p.period)) || (this.currentEra && this.currentEra.year) || '當前時代';
+    const eraTitle = (this.currentEra && this.currentEra.title) || '';
+
+    const eraBadgeEl = document.getElementById('id-era-badge');
+    if (eraBadgeEl) eraBadgeEl.innerText = `${activeSubEra} · ${eraTitle}`;
+
+    const idEraAvatar = document.getElementById('id-era-avatar');
+    if (idEraAvatar) idEraAvatar.innerText = activeAvatar;
+
+    const eraNameEl = document.getElementById('id-era-name');
+    if (eraNameEl) eraNameEl.innerText = `${activeTitle} · ${activeName}`;
+
+    const eraTitleEl = document.getElementById('id-era-title');
+    if (eraTitleEl) eraTitleEl.innerText = `${activeRoleBadge} ｜ ${activeTitle}`;
+
+    const eraGoalEl = document.getElementById('id-era-goal');
+    if (eraGoalEl) eraGoalEl.innerText = activeGoal;
+
+    const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    const curName = (this.currentEra && this.currentEra.currencyName) || '行商銀兩';
+    const idSilverLabel = document.getElementById('id-era-silver-label');
+    if (idSilverLabel) idSilverLabel.innerText = `💰 當前時空持有${curName}`;
+
+    const eraSilverEl = document.getElementById('id-era-silver');
+    if (eraSilverEl) eraSilverEl.innerText = `${this.state.silver} ${curUnit}`;
+
+    const homeObj = this.models.HOME_TIERS ? this.models.HOME_TIERS.find(h => h.level === masterHomeLevel) : null;
+    const homeName = (this.currentEra && this.currentEra.homeName) || (homeObj ? homeObj.name : '臨河竹籬小茅舍');
+    const eraHomeEl = document.getElementById('id-era-home');
+    if (eraHomeEl) eraHomeEl.innerText = `${homeName} (Lv.${masterHomeLevel})`;
+
+    modal.classList.remove('hidden');
   }
 
   updateGameTimer() {
-    const el = document.getElementById('game-timer');
-    if (!el) return;
-    const elapsed = Math.floor((Date.now() - this.gameStartTime) / 1000);
-    const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-    const secs = String(elapsed % 60).padStart(2, '0');
-    el.innerText = `${mins}:${secs}`;
+    // 經商歷練計時器已由使用者需求移除，保留空方法避免潛在回呼報錯
   }
 
   toggleLoreModal() {
@@ -3616,43 +5514,84 @@ class GameController {
     const modal = document.getElementById('inventory-modal');
     if (!modal) return;
 
+    // 1. 渲染時代情報
     const cluesDiv = document.getElementById('inv-clues-list');
     if (this.state.unlockedClues.length === 0) {
-      cluesDiv.innerHTML = '<p class="text-sm sm:text-base text-slate-400">尚未獲得時代情報，可點擊「碼頭理貨」搜集。</p>';
+      cluesDiv.innerHTML = '<p class="text-sm sm:text-base text-slate-400">尚未獲得時代情報，走訪地標或碼頭打工即可獲取。</p>';
     } else {
       cluesDiv.innerHTML = this.state.unlockedClues.map(cid => {
         const c = this.models.CLUE_DATABASE[cid];
+        if (!c) return '';
         return `
-          <div class="p-4 rounded-2xl bg-slate-800/90 border border-amber-500/40 flex items-start gap-3.5">
+          <div class="p-3.5 sm:p-4 rounded-2xl bg-slate-800/90 border border-amber-500/40 flex items-start gap-3.5 shadow">
             <span class="text-3xl shrink-0">${c.icon}</span>
             <div class="flex-1 min-w-0">
-              <p class="font-bold text-amber-200 text-base sm:text-lg">${c.name} <span class="text-xs font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/30">(${c.rarity})</span></p>
-              <p class="text-sm sm:text-base text-slate-200 mt-1 leading-relaxed">${c.gameplayTip}</p>
+              <div class="flex items-center justify-between gap-1 flex-wrap">
+                <p class="font-bold text-amber-200 text-base sm:text-lg">${c.name} <span class="text-xs font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/30">(${c.rarity})</span></p>
+                <span class="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded font-bold border border-emerald-500/30">已掌握</span>
+              </div>
+              <p class="text-xs sm:text-sm text-slate-200 mt-1 leading-relaxed">${c.gameplayTip}</p>
+              <p class="text-[11px] text-slate-400 mt-1 italic">${c.historicalLore}</p>
+              ${c.howToGet ? `<p class="text-[10px] text-amber-400/90 mt-1 font-bold">📍 獲取途徑：${c.howToGet}</p>` : ''}
             </div>
           </div>
         `;
       }).join('');
     }
 
+    // 2. 渲染跨時代奇物文物圖鑑
     const relicsDiv = document.getElementById('inv-relics-list');
-    if (this.state.inventoryCollectibles.length === 0) {
-      relicsDiv.innerHTML = '<p class="text-sm sm:text-base text-slate-400">尚未收集到歷史奇物文物。</p>';
+    const masterRelicsList = this.playerMaster ? this.playerMaster.masterRelics : this.state.inventoryCollectibles;
+    const allRelicKeys = Object.keys(this.models.COLLECTIBLE_DATABASE);
+
+    let html = '';
+    if (masterRelicsList.length === 0) {
+      html += '<p class="text-sm text-slate-400 mb-4">尚未收集到歷史奇物文物。</p>';
     } else {
-      relicsDiv.innerHTML = this.state.inventoryCollectibles.map(rid => {
+      html += masterRelicsList.map(rid => {
         const r = this.models.COLLECTIBLE_DATABASE[rid];
+        if (!r) return '';
         return `
-          <div class="p-4 rounded-2xl bg-slate-800/90 border border-purple-500/40 flex items-start gap-3.5">
+          <div class="p-3.5 sm:p-4 rounded-2xl bg-slate-800/90 border border-purple-500/40 flex items-start gap-3.5 shadow mb-3">
             <span class="text-3xl shrink-0">${r.icon}</span>
             <div class="flex-1 min-w-0">
-              <p class="font-bold text-purple-200 text-base sm:text-lg">${r.name} <span class="text-xs font-bold text-purple-400 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-500/30">(${r.rarity})</span></p>
-              <p class="text-sm sm:text-base text-emerald-300 font-bold mt-1">✨ ${r.buff}</p>
-              <p class="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">${r.lore}</p>
+              <div class="flex items-center justify-between gap-1 flex-wrap">
+                <p class="font-bold text-purple-200 text-base sm:text-lg">${r.name} <span class="text-xs font-bold text-purple-400 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-500/30">(${r.rarity})</span></p>
+                <span class="text-[10px] text-purple-300 bg-purple-950/60 px-2 py-0.5 rounded font-bold border border-purple-500/40">👑 跨時代永久珍藏</span>
+              </div>
+              <p class="text-xs sm:text-sm text-emerald-300 font-bold mt-1">✨ ${r.buff}</p>
+              <p class="text-xs text-slate-300 mt-1 leading-relaxed">${r.lore}</p>
             </div>
           </div>
         `;
       }).join('');
     }
 
+    // 未收集的奇物提供提示
+    const uncollectedKeys = allRelicKeys.filter(k => !masterRelicsList.includes(k));
+    if (uncollectedKeys.length > 0) {
+      html += `
+        <div class="mt-4 pt-3 border-t border-white/10">
+          <p class="text-xs text-slate-400 font-bold mb-2">🔍 待探尋時代奇物（點亮全圖鑑）：</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            ${uncollectedKeys.map(k => {
+              const r = this.models.COLLECTIBLE_DATABASE[k];
+              return `
+                <div class="p-2.5 rounded-xl bg-black/40 border border-white/10 flex items-center gap-2 text-xs">
+                  <span class="text-xl opacity-40">${r.icon}</span>
+                  <div class="min-w-0 flex-1">
+                    <p class="font-bold text-slate-400 truncate">${r.name}</p>
+                    <p class="text-[10px] text-amber-400/80 truncate">💡 ${r.howToGet || '探索或商業決策解鎖'}</p>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    relicsDiv.innerHTML = html;
     modal.classList.remove('hidden');
   }
 
@@ -3666,6 +5605,13 @@ class GameController {
     document.querySelectorAll('.moba-modal-backdrop').forEach(m => m.classList.add('hidden'));
     const bubble = document.getElementById('zone-prompt-bubble');
     if (bubble) bubble.classList.add('hidden');
+  }
+
+  isAnyModalOpen() {
+    const activeModals = document.querySelectorAll('.moba-modal-backdrop:not(.hidden)');
+    if (activeModals.length > 0) return true;
+    if (document.getElementById('exam-review-modal')) return true;
+    return false;
   }
 
   // ======================== 玩家自家宅邸系統 (Player Estate & Wardrobe) ========================
@@ -3695,16 +5641,20 @@ class GameController {
   }
 
   renderHomeModal() {
-    const currentTier = this.models.HOME_TIERS[this.state.homeLevel - 1] || this.models.HOME_TIERS[0];
-    const nextTier = this.models.HOME_TIERS[this.state.homeLevel] || null;
+    const homeLevel = (this.playerMaster && this.playerMaster.homeLevel) || this.state.homeLevel || 1;
+    const currentTier = this.models.HOME_TIERS[homeLevel - 1] || this.models.HOME_TIERS[0];
+    const nextTier = this.models.HOME_TIERS[homeLevel] || null;
+    const currentOutfit = (this.playerMaster && this.playerMaster.currentOutfit) || this.state.currentOutfit || 'outfit_peasant';
+    const unlockedOutfits = (this.playerMaster && this.playerMaster.unlockedOutfits) || this.state.unlockedOutfits || ['outfit_peasant'];
+    const accumulatedRent = (this.playerMaster && this.playerMaster.accumulatedRent) || this.state.accumulatedRent || 0;
 
     // 頂部與當前房屋
     const badge = document.getElementById('home-modal-badge');
-    if (badge) badge.innerText = `Lv.${this.state.homeLevel} ${currentTier.name}`;
+    if (badge) badge.innerText = `Lv.${homeLevel} ${currentTier.name}`;
 
     const curIcon = document.getElementById('home-current-icon');
     const icons = ['🛖', '🏡', '🏛️', '🏰'];
-    if (curIcon) curIcon.innerText = icons[Math.min(this.state.homeLevel - 1, 3)];
+    if (curIcon) curIcon.innerText = icons[Math.min(homeLevel - 1, 3)];
 
     const curName = document.getElementById('home-current-name');
     if (curName) curName.innerText = currentTier.name;
@@ -3718,9 +5668,9 @@ class GameController {
         nextCard.innerHTML = `
           <div class="text-center py-6">
             <span class="text-4xl block mb-2">👑</span>
-            <h4 class="font-serif font-black text-xl text-yellow-300">已起造至大稻埕頂級極致豪邸！</h4>
+            <h4 class="font-serif font-black text-xl text-yellow-300">已起造至家族頂級極致豪邸！</h4>
             <p class="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
-              您坐擁巴洛克西洋鐘樓豪邸，名震萬國！每週期皆可領取 80 兩巨額洋行分紅！
+              林晨恩家族坐擁巴洛克西洋鐘樓豪邸，名震萬國！每週期皆可領取 80 兩巨額洋行分紅，跨時空永久延續！
             </p>
           </div>
         `;
@@ -3754,8 +5704,8 @@ class GameController {
     const outfitsContainer = document.getElementById('home-outfits-list');
     if (outfitsContainer && this.models.HOME_OUTFITS) {
       outfitsContainer.innerHTML = this.models.HOME_OUTFITS.map(outfit => {
-        const isUnlocked = this.state.unlockedOutfits.includes(outfit.id) || this.state.homeLevel >= outfit.tierLevelRequired;
-        const isEquipped = this.state.currentOutfit === outfit.id;
+        const isUnlocked = unlockedOutfits.includes(outfit.id) || homeLevel >= outfit.tierLevelRequired;
+        const isEquipped = currentOutfit === outfit.id;
 
         return `
           <div onclick="${isUnlocked ? `game.changeOutfit('${outfit.id}')` : ''}" 
@@ -3780,11 +5730,12 @@ class GameController {
 
     // 租金顯示
     const rentDisp = document.getElementById('home-accumulated-rent');
-    if (rentDisp) rentDisp.innerText = `${this.state.accumulatedRent || 0} 兩`;
+    if (rentDisp) rentDisp.innerText = `${accumulatedRent} 兩`;
   }
 
   upgradeHome() {
-    const nextTier = this.models.HOME_TIERS[this.state.homeLevel];
+    const homeLevel = (this.playerMaster && this.playerMaster.homeLevel) || this.state.homeLevel || 1;
+    const nextTier = this.models.HOME_TIERS[homeLevel];
     if (!nextTier) return;
 
     if (this.state.silver < nextTier.cost) {
@@ -3793,13 +5744,21 @@ class GameController {
       return;
     }
 
-    // 扣除銀兩，提升宅邸等級
+    // 扣除銀兩，提升本尊永久宅邸等級
     this.state.silver -= nextTier.cost;
-    this.state.homeLevel += 1;
+    const newLevel = homeLevel + 1;
+    if (this.playerMaster) this.playerMaster.homeLevel = newLevel;
+    this.state.homeLevel = newLevel;
 
-    // 自動解鎖對應服裝
-    if (nextTier.unlockedOutfitId && !this.state.unlockedOutfits.includes(nextTier.unlockedOutfitId)) {
-      this.state.unlockedOutfits.push(nextTier.unlockedOutfitId);
+    // 自動解鎖對應服裝，永久歸屬於本尊
+    if (nextTier.unlockedOutfitId) {
+      if (this.playerMaster && !this.playerMaster.unlockedOutfits.includes(nextTier.unlockedOutfitId)) {
+        this.playerMaster.unlockedOutfits.push(nextTier.unlockedOutfitId);
+      }
+      if (!this.state.unlockedOutfits.includes(nextTier.unlockedOutfitId)) {
+        this.state.unlockedOutfits.push(nextTier.unlockedOutfitId);
+      }
+      if (this.playerMaster) this.playerMaster.currentOutfit = nextTier.unlockedOutfitId;
       this.state.currentOutfit = nextTier.unlockedOutfitId; // 自動換上新衣服
     }
 
@@ -3807,20 +5766,22 @@ class GameController {
     if (window.soundFx) window.soundFx.playLevelUp();
     this.coinVFX.burst(this.hero.x - this.camera.x, this.hero.y - this.camera.y, 40);
 
-    this.addFloatingText(this.hero.x, this.hero.y - 45, `🏡 宅邸升級為【${nextTier.name}】！`, '#facc15', 20);
-    this.showToast(`🎉 恭喜！您在大稻埕起造了【${nextTier.name}】，解鎖新衣裝與商號分紅！`);
+    this.addFloatingText(this.hero.x, this.hero.y - 45, `🏡 家族宅邸升級為【${nextTier.name}】！`, '#facc15', 20);
+    this.showToast(`🎉 恭喜！林晨恩家族起造了【${nextTier.name}】，解鎖新衣裝與商號分紅！基業永久繼承！`);
 
     this.renderHUD();
     this.renderHomeModal();
   }
 
   changeOutfit(outfitId) {
-    if (!this.state.unlockedOutfits.includes(outfitId)) {
+    const unlockedOutfits = (this.playerMaster && this.playerMaster.unlockedOutfits) || this.state.unlockedOutfits || [];
+    if (!unlockedOutfits.includes(outfitId)) {
       const outfit = this.models.HOME_OUTFITS.find(o => o.id === outfitId);
       this.showToast(`⚠️ 此衣裝需擴建宅邸至 Lv.${outfit.tierLevelRequired} 方可解鎖穿戴！`);
       return;
     }
 
+    if (this.playerMaster) this.playerMaster.currentOutfit = outfitId;
     this.state.currentOutfit = outfitId;
     const outfit = this.models.HOME_OUTFITS.find(o => o.id === outfitId);
 
@@ -3833,20 +5794,21 @@ class GameController {
   }
 
   collectHomeRent() {
-    const amount = this.state.accumulatedRent || 0;
+    const amount = (this.playerMaster && this.playerMaster.accumulatedRent) || this.state.accumulatedRent || 0;
     if (amount <= 0) {
       this.showToast('ℹ️ 當前聚寶盆暫無累積店租，稍等片刻鋪面即可產生收益！');
       return;
     }
 
     this.state.silver += amount;
+    if (this.playerMaster) this.playerMaster.accumulatedRent = 0;
     this.state.accumulatedRent = 0;
 
     if (window.soundFx) window.soundFx.playCoin();
     this.coinVFX.burst(this.hero.x - this.camera.x, this.hero.y - this.camera.y, 30);
 
-    this.addFloatingText(this.hero.x, this.hero.y - 40, `+${amount} 兩 (商號店租分紅)`, '#22c55e', 20);
-    this.showToast(`💰 成功領取 ${amount} 兩商號鋪面租金分紅！`);
+    this.addFloatingText(this.hero.x, this.hero.y - 40, `+${amount} 兩 (家族商號分紅)`, '#22c55e', 20);
+    this.showToast(`💰 成功領取 ${amount} 兩林晨恩家族商號鋪面租金分紅！`);
 
     this.renderHUD();
     this.renderHomeModal();
@@ -3862,6 +5824,877 @@ class GameController {
         modal.classList.add('hidden');
       }
     }
+  }
+
+  // ======================== 臺灣歷史長河 · 七大年代章節與 21 位角色視角選擇系統 ========================
+  showEraSelectModal(targetEraId = null) {
+    if (window.soundFx) window.soundFx.playClick();
+    this.selectedEraId = targetEraId || this.selectedEraId || this.currentEraId || this.models.HISTORICAL_ERAS[0].id;
+    this.renderEraSelectModal();
+    const modal = document.getElementById('era-select-modal');
+    if (modal) modal.classList.remove('hidden');
+
+    // 橫向滑動自動居中選中卡片
+    setTimeout(() => {
+      const eraBtnsContainer = document.getElementById('era-buttons-container');
+      if (eraBtnsContainer) {
+        const activeBtn = eraBtnsContainer.querySelector('.era-step-btn.active');
+        if (activeBtn) {
+          activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+      }
+    }, 100);
+  }
+
+  switchEraTab(eraId) {
+    if (window.soundFx) window.soundFx.playClick();
+    this.selectedEraId = eraId;
+    this.renderEraSelectModal();
+
+    // 橫向平滑滾動至選中按鈕
+    const eraBtnsContainer = document.getElementById('era-buttons-container');
+    if (eraBtnsContainer) {
+      const activeBtn = eraBtnsContainer.querySelector('.era-step-btn.active');
+      if (activeBtn) {
+        activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }
+
+  // 判斷當前時代是否已破關 (已完成當前篇章所有人物視角或已在 completedEras)
+  // 判斷當前時代是否已破關 (通關核心歷史角色或已解鎖下一時代)
+  isCurrentEraCompleted() {
+    if (!this.currentEra) return false;
+    // 1. 已列入 completedEras
+    if (this.playerMaster && this.playerMaster.completedEras && this.playerMaster.completedEras.includes(this.currentEra.id)) {
+      return true;
+    }
+    const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
+    // 2. 下一時代已在 unlockedEras 列表中
+    if (curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length) {
+      const nextEra = this.models.HISTORICAL_ERAS[curEraIdx + 1];
+      if (this.playerMaster && this.playerMaster.unlockedEras && this.playerMaster.unlockedEras.includes(nextEra.id)) {
+        return true;
+      }
+    }
+    // 3. 檢查本年代角色通關數
+    const curEraPerspectives = this.currentEra.perspectives || [];
+    if (curEraPerspectives.length > 0 && this.playerMaster && this.playerMaster.completedPerspectives) {
+      const doneCount = curEraPerspectives.filter(p => this.playerMaster.completedPerspectives.includes(p.id)).length;
+      const targetCount = Math.min(3, curEraPerspectives.length);
+      if (doneCount >= targetCount) {
+        if (!this.playerMaster.completedEras.includes(this.currentEra.id)) {
+          this.playerMaster.completedEras.push(this.currentEra.id);
+        }
+        if (curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length) {
+          const nextEra = this.models.HISTORICAL_ERAS[curEraIdx + 1];
+          if (!this.playerMaster.unlockedEras.includes(nextEra.id)) {
+            this.playerMaster.unlockedEras.push(nextEra.id);
+          }
+        }
+        this.saveMasterProfile();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 判斷時代篇章是否已解鎖 (第1章預設開啟，後續時代需通關前置時代或已解鎖)
+  isEraUnlocked(eraIndex) {
+    if (eraIndex === 0) return true;
+    if (!this.models.HISTORICAL_ERAS || eraIndex < 0 || eraIndex >= this.models.HISTORICAL_ERAS.length) return false;
+    const targetEra = this.models.HISTORICAL_ERAS[eraIndex];
+    if (this.playerMaster && this.playerMaster.unlockedEras && this.playerMaster.unlockedEras.includes(targetEra.id)) {
+      return true;
+    }
+    const prevEra = this.models.HISTORICAL_ERAS[eraIndex - 1];
+    if (this.playerMaster && this.playerMaster.completedEras && this.playerMaster.completedEras.includes(prevEra.id)) {
+      return true;
+    }
+    if (prevEra && prevEra.perspectives && this.playerMaster && this.playerMaster.completedPerspectives) {
+      const doneCount = prevEra.perspectives.filter(p => this.playerMaster.completedPerspectives.includes(p.id)).length;
+      if (doneCount >= Math.min(3, prevEra.perspectives.length)) {
+        return true;
+      }
+    }
+    // 活躍存檔中即為該時代時，直接允許延續
+    try {
+      const saved = localStorage.getItem('taiwan_rpg_active_session');
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (s && s.eraId === targetEra.id) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  // 判斷特定時代中的特定人物視角是否已解鎖 (依序演繹解鎖，嚴格保留已遊玩角色不退回第1關)
+  isPerspectiveUnlocked(era, pIndex) {
+    if (!era || !era.perspectives || pIndex < 0 || pIndex >= era.perspectives.length) return false;
+    if (pIndex === 0) return true;
+    const targetP = era.perspectives[pIndex];
+    // 若存檔或本尊檔案記錄當前活躍即為該角色，無條件保留，絕不打回第1關！
+    if (this.playerMaster && this.playerMaster.lastActivePerspectiveId === targetP.id) {
+      return true;
+    }
+    try {
+      const saved = localStorage.getItem('taiwan_rpg_active_session');
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (s && s.identityId === targetP.id) return true;
+      }
+    } catch (e) {}
+    const prevP = era.perspectives[pIndex - 1];
+    const prevDone = prevP && this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(prevP.id);
+    const selfDone = this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(targetP.id);
+    return !!(prevDone || selfDone);
+  }
+
+  showLockedEraToast(eraId) {
+    if (window.soundFx) window.soundFx.playClick();
+    const eraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === eraId);
+    const era = eraIdx !== -1 ? this.models.HISTORICAL_ERAS[eraIdx] : null;
+    const prevEra = eraIdx > 0 ? this.models.HISTORICAL_ERAS[eraIdx - 1] : null;
+    this.showToast(`🔒 時代篇章【${era ? era.title : ''}】尚未解鎖！需先通關前置篇章【${prevEra ? prevEra.title : ''}】全部歷史人物視角！`, 3500);
+  }
+
+  showLockedPerspectiveToast(prevRoleName) {
+    if (window.soundFx) window.soundFx.playClick();
+    this.showToast(`🔒 該歷史人物視角尚未解鎖！需先完成前置角色【${prevRoleName || '前一位人物'}】的歷史演繹！`, 3500);
+  }
+
+  renderEraSelectModal() {
+    const eraBtnsContainer = document.getElementById('era-buttons-container');
+    const selectedEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.selectedEraId);
+    const selectedEra = selectedEraIdx !== -1 ? this.models.HISTORICAL_ERAS[selectedEraIdx] : this.models.HISTORICAL_ERAS[0];
+    const isSelectedEraUnlocked = this.isEraUnlocked(selectedEraIdx !== -1 ? selectedEraIdx : 0);
+    const prevEraObj = selectedEraIdx > 0 ? this.models.HISTORICAL_ERAS[selectedEraIdx - 1] : null;
+
+    // 1. 動態渲染頂部 7 大時代按鈕 (支援橫向平滑滾動)
+    if (eraBtnsContainer) {
+      eraBtnsContainer.innerHTML = this.models.HISTORICAL_ERAS.map((era, index) => {
+        const isActive = era.id === this.selectedEraId;
+        const isCompleted = this.playerMaster && this.playerMaster.completedEras.includes(era.id);
+        const unlocked = this.isEraUnlocked(index);
+
+        // 計算此時代已通關角色數
+        const doneRoleCount = era.perspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id)).length;
+        const totalRoleCount = era.perspectives.length;
+
+        let badgeText = era.badge;
+        let badgeClass = isActive ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-300';
+        if (!unlocked) {
+          badgeText = '🔒 未解鎖';
+          badgeClass = 'bg-slate-900 text-slate-400 border border-slate-700';
+        } else if (isCompleted) {
+          badgeText = '🏆 通關';
+          badgeClass = 'bg-emerald-500 text-slate-950';
+        } else if (doneRoleCount > 0) {
+          badgeText = `進度 ${doneRoleCount}/${totalRoleCount}`;
+          badgeClass = 'bg-sky-500 text-slate-950';
+        }
+
+        const lockBtnClass = !unlocked ? 'opacity-60 border-slate-800' : '';
+
+        return `
+          <button onclick="game.switchEraTab('${era.id}')" 
+            class="era-step-btn ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''} ${lockBtnClass}">
+            <div class="flex items-center gap-1 mb-0.5">
+              <span class="text-base sm:text-lg">${unlocked ? era.icon : '🔒'}</span>
+              <span class="text-[10px] sm:text-[11px] font-black px-1.5 py-0.5 rounded-full ${badgeClass}">${badgeText}</span>
+            </div>
+            <span class="font-serif font-black text-xs sm:text-sm whitespace-nowrap ${isActive ? 'text-amber-200' : (unlocked ? 'text-slate-200' : 'text-slate-400')}">${era.year}</span>
+            <span class="text-[10px] text-slate-300 font-bold truncate max-w-[120px]">${era.period}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    const isEraCompleted = this.playerMaster && this.playerMaster.completedEras.includes(selectedEra.id);
+
+    // 2. 更新選中年代簡介卡片 (關鍵詞標籤 + 一句話目標 + 未解鎖警示橫幅)
+    const titleEl = document.getElementById('era-modal-title');
+    const tagsEl = document.getElementById('era-modal-tags');
+    const descEl = document.getElementById('era-modal-desc');
+
+    if (titleEl) {
+      titleEl.innerHTML = `
+        <span class="flex items-center gap-1.5 flex-wrap">
+          <span>${isSelectedEraUnlocked ? selectedEra.icon : '🔒'}</span>
+          <span>${selectedEra.title} (${selectedEra.year})</span>
+          <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-amber-500/30 font-bold">${selectedEra.badge}</span>
+          ${isEraCompleted ? '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">🏆 本篇章已通關</span>' : ''}
+          ${!isSelectedEraUnlocked ? '<span class="text-xs px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold">🔒 篇章未解鎖</span>' : ''}
+        </span>
+      `;
+    }
+    if (tagsEl && selectedEra.tags) {
+      tagsEl.innerHTML = selectedEra.tags.map(tag => `<span class="px-2 py-0.5 text-xs font-bold rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30">#${tag}</span>`).join('');
+    }
+    if (descEl) {
+      let extraNotice = '';
+      if (!isSelectedEraUnlocked) {
+        extraNotice = `<div class="mt-2 p-3 rounded-xl bg-rose-950/70 border border-rose-500/50 text-rose-200 text-xs flex items-center gap-2 font-bold">
+          <span class="text-xl shrink-0">🔒</span>
+          <span>本時代篇章尚未解鎖！需先通關前置時代【${prevEraObj ? prevEraObj.title : ''}】全部歷史人物演繹，方可開啟！</span>
+        </div>`;
+      }
+      descEl.innerHTML = `<div>🎯 核心目標：${selectedEra.summary || selectedEra.desc || ''}</div>${extraNotice}`;
+    }
+
+    // 3. 連動渲染下方該時代所有角色視角 (依序解鎖，嚴格線性)
+    const perspectivesContainer = document.getElementById('era-perspectives-grid');
+    if (perspectivesContainer) {
+      perspectivesContainer.innerHTML = selectedEra.perspectives.map((p, pIndex) => {
+        const isCurrent = this.state && this.state.eraId === selectedEra.id && this.state.identityId === p.id;
+        const isCompleted = this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id);
+
+        let roleBadgeClass = 'role-badge-civilian';
+        if (p.roleType === 'bureaucrat') roleBadgeClass = 'role-badge-bureaucrat';
+        else if (p.roleType === 'pioneer') roleBadgeClass = 'role-badge-pioneer';
+
+        const goalText = p.briefGoal || p.missionObjective || p.perspectiveFocus || '';
+
+        // 判斷人物是否解鎖 (嚴格按順序演繹解鎖)
+        const isPerspectiveUnlocked = isSelectedEraUnlocked && this.isPerspectiveUnlocked(selectedEra, pIndex);
+
+        let statusBadgeHtml = '';
+        let buttonHtml = '';
+
+        if (!isSelectedEraUnlocked) {
+          statusBadgeHtml = '<span class="text-[10px] bg-slate-900 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full font-black">🔒 篇章未解鎖</span>';
+          buttonHtml = `
+            <button onclick="game.showLockedEraToast('${selectedEra.id}')" 
+              class="w-full py-2 rounded-xl bg-slate-800/80 text-slate-400 border border-slate-700 font-bold text-xs sm:text-sm shadow flex items-center justify-center gap-1 cursor-not-allowed hover:bg-slate-800">
+              <span>🔒 篇章未解鎖 (需通關【${prevEraObj ? prevEraObj.title.split('・')[0] : ''}】)</span>
+            </button>
+          `;
+        } else if (!isPerspectiveUnlocked) {
+          statusBadgeHtml = '<span class="text-[10px] bg-slate-900 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-black">🔒 視角未解鎖</span>';
+          buttonHtml = `
+            <button onclick="game.showLockedPerspectiveToast('${prevP ? prevP.name : ''}')" 
+              class="w-full py-2 rounded-xl bg-slate-800/80 text-slate-400 border border-slate-700 font-bold text-xs sm:text-sm shadow flex items-center justify-center gap-1 cursor-not-allowed hover:bg-slate-800">
+              <span>🔒 需先通關【${prevP ? prevP.name : ''}】</span>
+            </button>
+          `;
+        } else if (isCurrent) {
+          statusBadgeHtml = '<span class="text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full font-black shadow">演繹中</span>';
+          buttonHtml = `
+            <button onclick="game.closeModal('era-select-modal')" 
+              class="w-full py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs sm:text-sm shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer">
+              <span>🔄 繼續當前演繹</span>
+            </button>
+          `;
+        } else if (isCompleted) {
+          statusBadgeHtml = '<span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-black">✅ 已通關</span>';
+          buttonHtml = `
+            <button onclick="game.selectPerspectiveAndStartGame('${selectedEra.id}', '${p.id}')" 
+              class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 font-bold text-xs sm:text-sm shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer">
+              <span>🔄 重溫歷史視角</span>
+            </button>
+          `;
+        } else {
+          buttonHtml = `
+            <button onclick="game.selectPerspectiveAndStartGame('${selectedEra.id}', '${p.id}')" 
+              class="w-full py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow flex items-center justify-center gap-1 transition-transform active:scale-95 cursor-pointer">
+              <span>🚀 選擇此視角展開冒險</span>
+            </button>
+          `;
+        }
+
+        const isCardLocked = !isSelectedEraUnlocked || !isPerspectiveUnlocked;
+        const cardLockClass = isCardLocked ? 'opacity-70 grayscale-[30%] bg-slate-950/80 border-slate-800' : '';
+
+        return `
+          <div class="perspective-card ${isCurrent ? 'selected' : ''} ${isCompleted ? 'completed' : ''} ${cardLockClass}">
+            <div>
+              <div class="flex items-center justify-between gap-1 mb-1.5">
+                <span class="text-[11px] font-black px-2 py-0.5 rounded-full ${roleBadgeClass}">
+                  ${p.roleTypeBadge}
+                </span>
+                ${statusBadgeHtml}
+              </div>
+
+              <div class="flex items-center gap-2.5 my-1.5">
+                <div class="w-11 h-11 rounded-xl bg-slate-800/90 border border-amber-500/60 flex items-center justify-center text-2xl shadow shrink-0">
+                  ${p.avatar}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h5 class="font-serif font-black text-base text-amber-100">${p.name}</h5>
+                  <p class="text-xs font-bold text-amber-400 truncate">${p.title}</p>
+                </div>
+              </div>
+
+              <div class="p-2 rounded-lg bg-black/50 border border-white/10 text-xs mb-2 leading-snug">
+                <span class="text-sky-300 font-bold">🎯 任務：</span>
+                <span class="text-slate-200 font-medium">${goalText}</span>
+              </div>
+
+              <div class="text-[11px] font-bold text-slate-400 mb-2">
+                💰 初始資本: <b class="text-amber-300 font-mono">${p.initialSilver}${(selectedEra.currencyUnit) || '兩'}</b>
+              </div>
+            </div>
+
+            ${buttonHtml}
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  selectPerspectiveAndStartGame(eraId, perspectiveId, isFreshStart = false) {
+    const eraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === eraId);
+    if (eraIdx === -1) return;
+    const era = this.models.HISTORICAL_ERAS[eraIdx];
+    const pIndex = era.perspectives.findIndex(p => p.id === perspectiveId);
+    if (pIndex === -1) return;
+
+    // 嚴格校驗：時代篇章是否已解鎖
+    if (!this.isEraUnlocked(eraIdx)) {
+      this.showLockedEraToast(eraId);
+      return;
+    }
+
+    // 嚴格校驗：人物視角是否已解鎖 (按歷史順序解鎖)
+    if (!this.isPerspectiveUnlocked(era, pIndex)) {
+      const prevP = pIndex > 0 ? era.perspectives[pIndex - 1] : null;
+      this.showLockedPerspectiveToast(prevP ? prevP.name : '');
+      return;
+    }
+
+    if (window.soundFx) window.soundFx.playLevelUp();
+    this.closeModal('era-select-modal');
+    this.resetGame(eraId, perspectiveId, isFreshStart);
+    this.renderHUD();
+
+    // 更新小地圖與 HUD 標記
+    const minimapOverlay = document.querySelector('.minimap-overlay');
+    if (minimapOverlay && this.currentEra) {
+      minimapOverlay.innerText = `📍 ${this.currentEra.title.split('・')[0].split('·')[0]}`;
+    }
+    const minimapYear = document.querySelector('.minimap-container .font-mono span');
+    if (minimapYear && this.currentEra) {
+      minimapYear.innerText = `${this.currentEra.year}`;
+    }
+
+    this.coinVFX.burst(window.innerWidth / 2, window.innerHeight / 2, 40);
+    this.showToast(`✨ 已進入【${this.currentEra.year} ${this.currentEra.title}】！扮演【${this.state.identityName}】（${this.state.roleTypeBadge}）`, 4000);
+  }
+
+  switchPerspectiveInSameEra() {
+    this.closeModal('settlement-modal');
+    if (!this.currentEra) return;
+    const curIdx = this.currentEra.perspectives.findIndex(p => p.id === this.state.identityId);
+    const nextIdx = (curIdx + 1) % this.currentEra.perspectives.length;
+    const nextP = this.currentEra.perspectives[nextIdx];
+    this.selectPerspectiveAndStartGame(this.currentEra.id, nextP.id);
+  }
+
+  proceedToNextEra() {
+    this.closeModal('settlement-modal');
+
+    // 嚴格校驗：本年代是否已 3 位角色全部通關
+    const curEra = this.currentEra;
+    const curEraPerspectives = curEra ? curEra.perspectives : [];
+    const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id)).length;
+    const isEraAllCompleted = curEraPerspectives.length > 0 && doneCount === curEraPerspectives.length;
+
+    if (!isEraAllCompleted) {
+      if (window.soundFx) window.soundFx.playClick();
+      this.showToast(`🔒 下一個年代尚未解鎖：需先通關【${curEra ? curEra.title : '本年代'}】全部 3 位角色（目前 ${doneCount}/${curEraPerspectives.length}）！`, 4000);
+      // 打開歷史長河選單引導選擇下一位角色
+      this.showEraSelectModal(this.currentEraId);
+      return;
+    }
+
+    const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
+    const nextEraIdx = (curEraIdx + 1) % this.models.HISTORICAL_ERAS.length;
+    const nextEra = this.models.HISTORICAL_ERAS[nextEraIdx];
+    this.selectedEraId = nextEra.id;
+    this.showEraSelectModal(nextEra.id);
+  }
+
+  // ======================== 東方遊樂場大道與時空長河躍遷系統 ========================
+  jumpToNextEraSpacetime(nextEraId) {
+    if (this.isTransitioningEra) return;
+    this.isTransitioningEra = true;
+
+    const nextEra = this.models.HISTORICAL_ERAS.find(e => e.id === nextEraId);
+    if (!nextEra) {
+      this.isTransitioningEra = false;
+      return;
+    }
+
+    if (window.soundFx) window.soundFx.playLevelUp();
+    this.coinVFX.burst(this.hero.x - this.camera.x, this.hero.y - this.camera.y, 60);
+
+    // 觸發全螢幕時空穿越光幕特效
+    this.triggerSpacetimeWarpEffect(nextEra);
+
+    setTimeout(() => {
+      // 呼叫 resetGame，重設至下一個時代，並指定從中央起始點 (x: 700, y: 420) 進入新世界！
+      this.resetGame(nextEraId, nextEra.defaultIdentityId || nextEra.perspectives[0].id, false, 'center');
+      this.renderHUD();
+
+      // 小地圖標籤更新
+      const minimapOverlay = document.querySelector('.minimap-overlay');
+      if (minimapOverlay && this.currentEra) {
+        minimapOverlay.innerText = `📍 ${this.currentEra.title.split('・')[0].split('·')[0]}`;
+      }
+      const minimapYear = document.querySelector('.minimap-container .font-mono span');
+      if (minimapYear && this.currentEra) {
+        minimapYear.innerText = `${this.currentEra.year}`;
+      }
+
+      this.showToast(`🌌 穿越時空長河！已抵達【${this.currentEra.year} ${this.currentEra.title}】！扮演【${this.state.identityName}】（${this.state.roleTypeBadge}）`, 4500);
+      this.addFloatingText(this.hero.x, this.hero.y - 60, `✨ 抵達新世界：${this.currentEra.title}`, '#38bdf8', 26);
+
+      this.isTransitioningEra = false;
+    }, 600);
+  }
+
+  jumpToPrevEraSpacetime(prevEraId) {
+    if (this.isTransitioningEra) return;
+    this.isTransitioningEra = true;
+
+    const prevEra = this.models.HISTORICAL_ERAS.find(e => e.id === prevEraId);
+    if (!prevEra) {
+      this.isTransitioningEra = false;
+      return;
+    }
+
+    if (window.soundFx) window.soundFx.playClick();
+    this.coinVFX.burst(this.hero.x - this.camera.x, this.hero.y - this.camera.y, 45);
+
+    // 觸發全螢幕時空回溯光幕特效
+    this.triggerSpacetimeWarpEffect(prevEra, true);
+
+    setTimeout(() => {
+      // 依歷史回溯特性：角色切換為上一個時代最後演繹或該時代代表人物
+      let targetPId = prevEra.defaultIdentityId || prevEra.perspectives[0].id;
+      if (this.playerMaster && this.playerMaster.lastActivePerspectiveId && prevEra.perspectives.some(p => p.id === this.playerMaster.lastActivePerspectiveId)) {
+        targetPId = this.playerMaster.lastActivePerspectiveId;
+      } else if (prevEra.perspectives && prevEra.perspectives.length > 0) {
+        targetPId = prevEra.perspectives[prevEra.perspectives.length - 1].id;
+      }
+
+      this.resetGame(prevEraId, targetPId, false, 'center');
+      this.renderHUD();
+
+      // 小地圖標籤更新
+      const minimapOverlay = document.querySelector('.minimap-overlay');
+      if (minimapOverlay && this.currentEra) {
+        minimapOverlay.innerText = `📍 ${this.currentEra.title.split('・')[0].split('·')[0]}`;
+      }
+      const minimapYear = document.querySelector('.minimap-container .font-mono span');
+      if (minimapYear && this.currentEra) {
+        minimapYear.innerText = `${this.currentEra.year}`;
+      }
+
+      this.showToast(`🕰️ 時空回溯！已返回【${this.currentEra.year} ${this.currentEra.title}】！扮演【${this.state.identityName}】（${this.state.roleTypeBadge}）`, 4500);
+      this.addFloatingText(this.hero.x, this.hero.y - 60, `🕰️ 角色切換：${this.state.identityName}`, '#f59e0b', 26);
+      this.isTransitioningEra = false;
+    }, 600);
+  }
+
+  triggerSpacetimeWarpEffect(targetEra, isRewind = false) {
+    const overlay = document.getElementById('spacetime-warp-overlay');
+    const title = document.getElementById('warp-era-title');
+    const sub = document.getElementById('warp-era-subtitle');
+    if (!overlay) return;
+    if (title) {
+      title.innerText = isRewind ? `🕰️ 時空歲月回溯 · 返回【${targetEra.title}】` : `🌌 跨越時空長河 · 前往【${targetEra.title}】`;
+    }
+    if (sub) {
+      sub.innerText = isRewind ? `星軌倒轉，歲月重溫……重返 ${targetEra.year} ${targetEra.period || ''}` : `歷史長河奔流……即將進入 ${targetEra.year} ${targetEra.period || ''}`;
+    }
+    overlay.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      overlay.classList.remove('opacity-0');
+      overlay.classList.add('opacity-100');
+    });
+    setTimeout(() => {
+      overlay.classList.remove('opacity-100');
+      overlay.classList.add('opacity-0');
+      setTimeout(() => overlay.classList.add('hidden'), 500);
+    }, 1100);
+  }
+
+  drawPlaygroundBoulevard(ctx) {
+    ctx.save();
+
+    // 1. 中途紀元星盤廣場 (Chrono Astrolabe Plaza, x: 1750, y: 420)
+    ctx.beginPath();
+    ctx.arc(1750, 420, 95, 0, Math.PI * 2);
+    ctx.fillStyle = '#1e293b';
+    ctx.fill();
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(1750, 420, 72, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
+    ctx.setLineDash([8, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 星盤符文與羅盤指針雕刻
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.lineWidth = 1.5;
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+      ctx.beginPath();
+      ctx.moveTo(1750, 420);
+      ctx.lineTo(1750 + Math.cos(a) * 65, 420 + Math.sin(a) * 65);
+      ctx.stroke();
+    }
+
+    // 中央巨石日晷 (Chrono Sundial)
+    ctx.fillStyle = '#475569';
+    ctx.beginPath();
+    ctx.arc(1750, 420, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ca8a04';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 日晷指針與動態陰影
+    const shadowAngle = this.ambientLightTick * 0.3;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(1750, 420);
+    ctx.lineTo(1750 + Math.cos(shadowAngle) * 28, 420 + Math.sin(shadowAngle) * 28);
+    ctx.stroke();
+
+    ctx.fillStyle = '#fef08a';
+    ctx.beginPath();
+    ctx.arc(1750, 420, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. 北側巨石陣林與休憩涼亭 (x: 1750, y: 160)
+    this.drawStonePath(ctx, 1750, 420, 1750, 180);
+    
+    // 史前巨石星柱群
+    const megaliths = [
+      { x: 1680, y: 160, h: 42, w: 18, color: '#64748b' },
+      { x: 1750, y: 130, h: 56, w: 22, color: '#94a3b8' },
+      { x: 1820, y: 160, h: 40, w: 18, color: '#64748b' }
+    ];
+    for (const m of megaliths) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(m.x + 8, m.y + m.h / 2, m.w * 0.9, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = m.color;
+      ctx.beginPath();
+      ctx.roundRect(m.x - m.w / 2, m.y - m.h / 2, m.w, m.h, 5);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 柱面神秘符文
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(m.x, m.y - m.h / 4);
+      ctx.lineTo(m.x, m.y + m.h / 4);
+      ctx.moveTo(m.x - 4, m.y);
+      ctx.lineTo(m.x + 4, m.y);
+      ctx.stroke();
+    }
+
+    // 3. 南側水岸觀景棧道與眺望鏡 (x: 1750, y: 700)
+    this.drawStonePath(ctx, 1750, 420, 1750, 710);
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(1700, 710, 100, 45);
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1700, 710, 100, 45);
+
+    // 眺望鏡標籤
+    ctx.fillStyle = '#bae6fd';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔭 水岸長河眺望台', 1750, 700);
+
+    // 4. 大道沿途路燈與景觀裝飾 (x: 1350, 1550, 1950, 2150)
+    const avenueLamps = [1350, 1550, 1950, 2150];
+    for (const lx of avenueLamps) {
+      this.drawStreetLanternPost(ctx, lx, 360);
+      this.drawStreetLanternPost(ctx, lx, 480);
+    }
+
+    // 5. 探險營地 (x: 1450, y: 260)
+    ctx.fillStyle = '#475569';
+    ctx.beginPath();
+    ctx.moveTo(1420, 280);
+    ctx.lineTo(1450, 230);
+    ctx.lineTo(1480, 280);
+    ctx.closePath();
+    ctx.fillStyle = '#0284c7';
+    ctx.fill();
+    ctx.strokeStyle = '#bae6fd';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 營火
+    const firePulse = Math.sin(this.ambientLightTick * 6) * 3;
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.arc(1505, 275, 7 + firePulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(1505, 273, 4 + firePulse * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 6. 巨幅時空路標告示
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    ctx.strokeStyle = '#ca8a04';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(1650, 375, 200, 28, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🧭 紀元星軌大道 · 前方時空渡口 ▶', 1750, 394);
+
+    ctx.restore();
+  }
+
+  drawSpacetimePortals(ctx) {
+    const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
+    const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
+    const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
+    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted();
+
+    ctx.save();
+
+    // ==================== 1. 東方時空長河躍遷渡口 (x: 2320, y: 420) 與封印壁障 ====================
+    if (hasNextEra) {
+      const pX = 2320;
+      const pY = 420;
+
+      // 若尚未破關：繪製垂直貫通天地 (x: 2260) 的「時空封印壁障能量結界」
+      if (!isNextUnlocked) {
+        const barrierX = 2260;
+        const bPulse = Math.sin(this.ambientLightTick * 4) * 0.12;
+
+        // 1. 全地圖垂直光幕 (遮蔽東方時空)
+        const wallGrad = ctx.createLinearGradient(barrierX - 25, 0, barrierX + 60, 0);
+        wallGrad.addColorStop(0, 'rgba(244, 63, 94, 0)');
+        wallGrad.addColorStop(0.35, `rgba(225, 29, 72, ${0.28 + bPulse})`);
+        wallGrad.addColorStop(0.65, `rgba(190, 18, 60, ${0.45 + bPulse})`);
+        wallGrad.addColorStop(1, 'rgba(15, 23, 42, 0.7)');
+        ctx.fillStyle = wallGrad;
+        ctx.fillRect(barrierX - 20, -200, 360, this.worldHeight + 400);
+
+        // 2. 封印雷射邊界光軸
+        ctx.save();
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 3.5;
+        ctx.shadowColor = '#f43f5e';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(barrierX, -100);
+        ctx.lineTo(barrierX, this.worldHeight + 200);
+        ctx.stroke();
+
+        // 3. 封印力場菱形符文網 (在道路交接處)
+        ctx.strokeStyle = 'rgba(251, 113, 133, 0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([12, 12]);
+        ctx.beginPath();
+        ctx.moveTo(barrierX + 15, -100);
+        ctx.lineTo(barrierX + 15, this.worldHeight + 200);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        // 4. 壁障中央巨型封印符文徽記 (x: 2260, y: 420)
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(barrierX, 420, 38, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.fill();
+        ctx.strokeStyle = '#e11d48';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        ctx.font = 'bold 22px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🔒', barrierX, 420);
+        ctx.restore();
+      }
+
+      // 地面時空引力光環
+      const pulse = Math.sin(this.ambientLightTick * 3) * 6;
+      ctx.beginPath();
+      ctx.arc(pX, pY, 70 + pulse, 0, Math.PI * 2);
+      ctx.fillStyle = isNextUnlocked ? 'rgba(168, 85, 247, 0.18)' : 'rgba(225, 29, 72, 0.08)';
+      ctx.fill();
+      ctx.strokeStyle = isNextUnlocked ? '#38bdf8' : '#e11d48';
+      ctx.lineWidth = isNextUnlocked ? 3 : 2;
+      ctx.stroke();
+
+      // 旋轉符文內圈
+      ctx.save();
+      ctx.translate(pX, pY);
+      ctx.rotate(this.ambientLightTick * (isNextUnlocked ? 1.2 : 0.4));
+      ctx.beginPath();
+      ctx.arc(0, 0, 48, 0, Math.PI * 2);
+      ctx.strokeStyle = isNextUnlocked ? '#facc15' : '#fda4af';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([8, 8]);
+      ctx.stroke();
+      ctx.restore();
+
+      // 傳送門門柱 (雙座紀元方尖碑)
+      const pillarW = 26;
+      const pillarH = 140;
+      const pillarOffset = 65;
+
+      for (const side of [-1, 1]) {
+        const pilX = pX + side * pillarOffset;
+        const pilY = pY - pillarH / 2;
+
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = isNextUnlocked ? '#c084fc' : '#f43f5e';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.roundRect(pilX - pillarW / 2, pilY, pillarW, pillarH, 7);
+        ctx.fill();
+        ctx.stroke();
+
+        // 柱身充能導光槽
+        const flowY = pilY + (Math.sin(this.ambientLightTick * 4 + side) * 0.5 + 0.5) * (pillarH - 20);
+        ctx.fillStyle = isNextUnlocked ? '#38bdf8' : '#fda4af';
+        ctx.beginPath();
+        ctx.arc(pilX, flowY + 10, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 柱頂能量浮石
+        const floatY = pilY - 14 + Math.sin(this.ambientLightTick * 3 + side) * 4;
+        ctx.fillStyle = isNextUnlocked ? '#facc15' : '#ef4444';
+        ctx.beginPath();
+        ctx.arc(pilX, floatY, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 門扉中央時空漩渦 (Vortex / Barrier Veil)
+      if (isNextUnlocked) {
+        // ✨ 已破關：耀眼時空裂隙
+        const vortexGrad = ctx.createRadialGradient(pX, pY, 5, pX, pY, 55);
+        vortexGrad.addColorStop(0, '#ffffff');
+        vortexGrad.addColorStop(0.3, '#38bdf8');
+        vortexGrad.addColorStop(0.7, '#8b5cf6');
+        vortexGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+        ctx.fillStyle = vortexGrad;
+        ctx.beginPath();
+        ctx.ellipse(pX, pY, 45, 60, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 核心躍遷奇異點
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(pX, pY, 8 + Math.sin(this.ambientLightTick * 6) * 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // 🔒 尚未破關：時空封印壁障
+        ctx.fillStyle = 'rgba(225, 29, 72, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(pX, pY, 45, 60, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#e11d48';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 封印鎖頭標記
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🔒', pX, pY);
+      }
+
+      // 懸浮告示大牌匾 (Overhead Plaque)
+      const bannerY = pY - 95;
+      const bannerW = 290;
+      const bannerH = 46;
+
+      ctx.fillStyle = '#0b1120';
+      ctx.strokeStyle = isNextUnlocked ? '#a855f7' : '#e11d48';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(pX - bannerW / 2, bannerY, bannerW, bannerH, 10);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      if (isNextUnlocked) {
+        ctx.fillStyle = '#fef08a';
+        ctx.font = 'bold 15px "Noto Serif TC", serif';
+        ctx.fillText(`🌌 跨越時空 ▶ 前往【${nextEra.title}】`, pX, bannerY + 18);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText('✨ 已破關！一直往右走即可跨入下一時代', pX, bannerY + 36);
+      } else {
+        const curEraPerspectives = this.currentEra ? this.currentEra.perspectives : [];
+        const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id)).length;
+        ctx.fillStyle = '#fca5a5';
+        ctx.font = 'bold 14px "Noto Serif TC", serif';
+        ctx.fillText(`🔒 時空界線封印 · 前方【${nextEra.title}】`, pX, bannerY + 18);
+        ctx.fillStyle = '#fda4af';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText(`未破關走不過去（進度 ${doneCount}/${curEraPerspectives.length} 角色）`, pX, bannerY + 36);
+      }
+    }
+
+    // ==================== 2. 西方時空回溯渡口 (x: 200, y: 420) ====================
+    if (curEraIdx > 0) {
+      const prevEra = this.models.HISTORICAL_ERAS[curEraIdx - 1];
+      const pX = 200;
+      const pY = 420;
+
+      ctx.beginPath();
+      ctx.arc(pX, pY, 50, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(217, 119, 6, 0.15)';
+      ctx.fill();
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🕰️', pX, pY);
+
+      // 牌匾
+      const bY = pY - 65;
+      const bW = 200;
+      const bH = 34;
+      ctx.fillStyle = '#0b1120';
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(pX - bW / 2, bY, bW, bH, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#fed7aa';
+      ctx.font = 'bold 12px "Noto Serif TC", serif';
+      ctx.fillText(`🕰️ 時空回溯 ◀ 【${prevEra.title}】`, pX, bY + 16);
+      ctx.fillStyle = '#fdba74';
+      ctx.font = '10px sans-serif';
+      ctx.fillText('向左踏入即可重溫歷史', pX, bY + 28);
+    }
+
+    ctx.restore();
   }
 }
 
