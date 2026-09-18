@@ -693,7 +693,7 @@ class GameController {
         historicalDecisionsCount: savedSession.historicalDecisionsCount || 0
       };
       if (spawnPosition === 'west') {
-        this.hero.x = 280;
+        this.hero.x = -500;
         this.hero.y = 420;
       } else if (spawnPosition === 'east') {
         this.hero.x = 2200;
@@ -730,7 +730,7 @@ class GameController {
         historicalDecisionsCount: 0
       };
       if (spawnPosition === 'west') {
-        this.hero.x = 280;
+        this.hero.x = -500;
         this.hero.y = 420;
       } else if (spawnPosition === 'east') {
         this.hero.x = 2200;
@@ -939,8 +939,8 @@ class GameController {
       this.hero.isMoving = false;
     }
 
-    // 限制在世界邊界內
-    this.hero.x = Math.max(50, Math.min(this.worldWidth - 50, this.hero.x));
+    // 限制在世界邊界內 (允許主角向西探索至西方星軌渡口 -750，向東至 2550)
+    this.hero.x = Math.max(-750, Math.min(2550, this.hero.x));
     this.hero.y = Math.max(50, Math.min(this.worldHeight - 50, this.hero.y));
 
     // 檢查東方時空界線與躍遷判定 (往右走跨越至下一個年代/時空)
@@ -976,10 +976,10 @@ class GameController {
       }
     }
 
-    // 檢查西方時空回溯渡口 (往回走/向左走至 x <= 240，可穿越至上一時空/循環時空)
+    // 檢查西方時空回溯渡口 (向左遠離工坊走出城鎮，踏入西方時空渡口 x <= -620，可穿越至上一時空/循環時空)
     const prevEraIdx = curEraIdx > 0 ? curEraIdx - 1 : this.models.HISTORICAL_ERAS.length - 1;
     const prevEra = this.models.HISTORICAL_ERAS[prevEraIdx];
-    if (this.hero.x <= 240) {
+    if (this.hero.x <= -620) {
       this.jumpToPrevEraSpacetime(prevEra.id);
     }
 
@@ -998,8 +998,8 @@ class GameController {
     const targetCamY = this.hero.y - vH / 2;
 
     // 頂部有約 80px 的常駐主資訊欄，左側有約 250px 的側邊欄與情報卡
-    // 允許相機向頂部 (-160) 與向左側 (-240) 延伸，確保走到石屋與左側工坊時建築與標題文字完整清晰可見
-    const minCamX = -240;
+    // 允許相機向頂部 (-160) 與向左側深度延伸 (-950)，確保西方大道、星盤廣場與時空渡口完整清晰可見
+    const minCamX = -950;
     const minCamY = -160;
     const maxCamX = Math.max(minCamX, this.worldWidth - vW + 160);
     const maxCamY = Math.max(minCamY, this.worldHeight - vH + 140);
@@ -1166,7 +1166,7 @@ class GameController {
     if (!nearestZone) {
       const prevEraIdx = curEraIdx > 0 ? curEraIdx - 1 : this.models.HISTORICAL_ERAS.length - 1;
       const prevEra = this.models.HISTORICAL_ERAS[prevEraIdx];
-      const portalX = 220;
+      const portalX = -650;
       const portalY = 420;
       const d = Math.hypot(this.hero.x - portalX, this.hero.y - portalY);
       if (d < 150) {
@@ -1537,13 +1537,13 @@ class GameController {
   drawTerrain(ctx) {
     // 基底土地顏色 (擴展覆蓋四方緩衝區，確保相機往上、往左平移時不露黑邊)
     ctx.fillStyle = '#0f172a';
-    ctx.fillRect(-800, -600, this.worldWidth + 1600, this.worldHeight + 1200);
+    ctx.fillRect(-1400, -600, this.worldWidth + 2400, this.worldHeight + 1200);
 
     // 鋪設細緻微石磚地紋 (止於淡水河岸線 y: 750)
     ctx.strokeStyle = 'rgba(51, 65, 85, 0.35)';
     ctx.lineWidth = 1;
     const tSize = 48;
-    for (let x = -600; x < this.worldWidth + 600; x += tSize) {
+    for (let x = -1200; x < this.worldWidth + 600; x += tSize) {
       ctx.beginPath();
       ctx.moveTo(x, -600);
       ctx.lineTo(x, 750);
@@ -1551,7 +1551,7 @@ class GameController {
     }
     for (let y = -600; y < 750; y += tSize) {
       ctx.beginPath();
-      ctx.moveTo(-600, y);
+      ctx.moveTo(-1200, y);
       ctx.lineTo(this.worldWidth + 600, y);
       ctx.stroke();
     }
@@ -1572,8 +1572,8 @@ class GameController {
 
     // 東方長河星軌大道 (貫穿至東方時空渡口，寬闊遊樂場通道)
     this.drawStonePath(ctx, 700, 420, 2320, 420);
-    // 西方時空回溯支線
-    this.drawStonePath(ctx, 700, 420, 200, 420);
+    // 西方時空回溯星軌大道 (自中央廣場一路向西直達西方渡口 -750，遠離城鎮工棚)
+    this.drawStonePath(ctx, 700, 420, -750, 420);
 
     // 繪製東方遊樂場大道與景觀公園
     this.drawPlaygroundBoulevard(ctx);
@@ -1634,14 +1634,14 @@ class GameController {
     waterGrad.addColorStop(1, '#0284c7');
 
     ctx.fillStyle = waterGrad;
-    ctx.fillRect(-800, riverStartY, this.worldWidth + 1600, this.worldHeight - riverStartY + 600);
+    ctx.fillRect(-1400, riverStartY, this.worldWidth + 2400, this.worldHeight - riverStartY + 600);
 
     // 河岸石砌防潮坡堤
     ctx.fillStyle = '#334155';
-    ctx.fillRect(-800, riverStartY - 8, this.worldWidth + 1600, 10);
+    ctx.fillRect(-1400, riverStartY - 8, this.worldWidth + 2400, 10);
     ctx.strokeStyle = '#64748b';
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(-800, riverStartY - 8, this.worldWidth + 1600, 10);
+    ctx.strokeRect(-1400, riverStartY - 8, this.worldWidth + 2400, 10);
 
     // 水波粼粼波紋
     ctx.strokeStyle = 'rgba(186, 230, 253, 0.28)';
@@ -1650,7 +1650,7 @@ class GameController {
       const wy = riverStartY + 20 + i * 26;
       const waveShift = Math.sin(this.ambientLightTick * 1.5 + i * 0.8) * 35;
       ctx.beginPath();
-      ctx.moveTo(-800, wy);
+      ctx.moveTo(-1400, wy);
       ctx.bezierCurveTo(380 + waveShift, wy - 12, 750 - waveShift, wy + 12, 1100 + waveShift, wy - 6);
       ctx.lineTo(this.worldWidth + 800, wy);
       ctx.stroke();
@@ -4266,8 +4266,10 @@ class GameController {
     const mw = 110;
     const mh = 110;
 
-    // 縮放比例
-    const scaleX = mw / this.worldWidth;
+    // 縮放比例與世界橫向範圍 (橫向世界 -800 ~ 2600，總寬 3400)
+    const minMapWorldX = -800;
+    const totalMapW = 3400;
+    const toMapX = (wx) => ((wx - minMapWorldX) / totalMapW) * mw;
     const scaleY = mh / this.worldHeight;
 
     // 地圖底色
@@ -4280,7 +4282,7 @@ class GameController {
 
     // 木棧橋
     mctx.fillStyle = '#78350f';
-    mctx.fillRect(605 * scaleX, 720 * scaleY, 190 * scaleX, 140 * scaleY);
+    mctx.fillRect(toMapX(605), 720 * scaleY, 190 * (mw / totalMapW), 140 * scaleY);
 
     // 標註各大商行與地標
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
@@ -4290,16 +4292,16 @@ class GameController {
 
       mctx.fillStyle = isTarget ? (loc.themeColor || '#f59e0b') : '#475569';
       mctx.beginPath();
-      mctx.arc(loc.doorX * scaleX, loc.doorY * scaleY, isTarget ? 4.5 : 2.5, 0, Math.PI * 2);
+      mctx.arc(toMapX(loc.doorX), loc.doorY * scaleY, isTarget ? 4.5 : 2.5, 0, Math.PI * 2);
       mctx.fill();
     }
 
-    // 標註大道主線與東方時空渡口
+    // 標註大道主線與東西方時空渡口 (-650 至 1880)
     mctx.strokeStyle = 'rgba(100, 116, 139, 0.5)';
     mctx.lineWidth = 1.5;
     mctx.beginPath();
-    mctx.moveTo(220 * scaleX, 420 * scaleY);
-    mctx.lineTo(1880 * scaleX, 420 * scaleY);
+    mctx.moveTo(toMapX(-650), 420 * scaleY);
+    mctx.lineTo(toMapX(1880), 420 * scaleY);
     mctx.stroke();
 
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
@@ -4312,22 +4314,22 @@ class GameController {
         mctx.strokeStyle = '#f43f5e';
         mctx.lineWidth = 1.5;
         mctx.beginPath();
-        mctx.moveTo(1840 * scaleX, 0);
-        mctx.lineTo(1840 * scaleX, this.worldHeight * scaleY);
+        mctx.moveTo(toMapX(1840), 0);
+        mctx.lineTo(toMapX(1840), this.worldHeight * scaleY);
         mctx.stroke();
       }
       mctx.fillStyle = isNextUnlocked ? '#a855f7' : '#e11d48';
       mctx.beginPath();
-      mctx.arc(1880 * scaleX, 420 * scaleY, isNextUnlocked ? 4.5 : 3.5, 0, Math.PI * 2);
+      mctx.arc(toMapX(1880), 420 * scaleY, isNextUnlocked ? 4.5 : 3.5, 0, Math.PI * 2);
       mctx.fill();
       mctx.strokeStyle = isNextUnlocked ? '#38bdf8' : '#fda4af';
       mctx.lineWidth = 1.2;
       mctx.stroke();
     }
-    // 西方時空渡口標註
+    // 西方時空渡口標註 (-650)
     mctx.fillStyle = '#38bdf8';
     mctx.beginPath();
-    mctx.arc(220 * scaleX, 420 * scaleY, 3.5, 0, Math.PI * 2);
+    mctx.arc(toMapX(-650), 420 * scaleY, 3.5, 0, Math.PI * 2);
     mctx.fill();
     mctx.strokeStyle = '#c084fc';
     mctx.lineWidth = 1.2;
@@ -4336,7 +4338,7 @@ class GameController {
     // 標註英雄自身 (亮綠金光圓點)
     mctx.fillStyle = '#22c55e';
     mctx.beginPath();
-    mctx.arc(this.hero.x * scaleX, this.hero.y * scaleY, 4.5, 0, Math.PI * 2);
+    mctx.arc(toMapX(this.hero.x), this.hero.y * scaleY, 4.5, 0, Math.PI * 2);
     mctx.fill();
     mctx.strokeStyle = '#ffffff';
     mctx.lineWidth = 1.5;
@@ -4344,7 +4346,7 @@ class GameController {
 
     // 視角雷達錐
     mctx.save();
-    mctx.translate(this.hero.x * scaleX, this.hero.y * scaleY);
+    mctx.translate(toMapX(this.hero.x), this.hero.y * scaleY);
     mctx.rotate(this.hero.facing);
     mctx.beginPath();
     mctx.moveTo(0, 0);
@@ -4424,7 +4426,7 @@ class GameController {
       targetX = 1840;
       this.showToast('🔒 尚未通關歷史任務，東方時空封印壁障無法通行！', 3000);
     }
-    const clampedX = Math.max(50, Math.min(this.worldWidth - 50, targetX));
+    const clampedX = Math.max(-750, Math.min(2550, targetX));
     const clampedY = Math.max(50, Math.min(this.worldHeight - 50, y));
 
     this.hero.navTarget = {
@@ -6097,6 +6099,7 @@ class GameController {
     const perspectivesContainer = document.getElementById('era-perspectives-grid');
     if (perspectivesContainer) {
       perspectivesContainer.innerHTML = selectedEra.perspectives.map((p, pIndex) => {
+        const prevP = pIndex > 0 ? selectedEra.perspectives[pIndex - 1] : null;
         const isCurrent = this.state && this.state.eraId === selectedEra.id && this.state.identityId === p.id;
         const isCompleted = this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id);
 
@@ -6497,10 +6500,10 @@ class GameController {
       this.drawStreetLanternPost(ctx, lx, 480);
     }
 
-    // ==================== 2. 西方星軌大道與中途廣場 (x: 350, y: 420) ====================
+    // ==================== 2. 西方星軌大道與中途廣場 (移至 x: -400, y: 420，徹底遠離城鎮工棚) ====================
     // 西方星盤廣場
     ctx.beginPath();
-    ctx.arc(350, 420, 85, 0, Math.PI * 2);
+    ctx.arc(-400, 420, 85, 0, Math.PI * 2);
     ctx.fillStyle = '#1e293b';
     ctx.fill();
     ctx.strokeStyle = '#c084fc';
@@ -6508,7 +6511,7 @@ class GameController {
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(350, 420, 65, 0, Math.PI * 2);
+    ctx.arc(-400, 420, 65, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(216, 180, 254, 0.4)';
     ctx.setLineDash([6, 5]);
     ctx.stroke();
@@ -6517,7 +6520,7 @@ class GameController {
     // 西方中央紀元日晷
     ctx.fillStyle = '#334155';
     ctx.beginPath();
-    ctx.arc(350, 420, 18, 0, Math.PI * 2);
+    ctx.arc(-400, 420, 18, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#a855f7';
     ctx.lineWidth = 2;
@@ -6525,15 +6528,15 @@ class GameController {
 
     ctx.fillStyle = '#e9d5ff';
     ctx.beginPath();
-    ctx.arc(350, 420, 4.5, 0, Math.PI * 2);
+    ctx.arc(-400, 420, 4.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // 西方北側星柱群 (x: 350, y: 160)
-    this.drawStonePath(ctx, 350, 420, 350, 180);
+    // 西方北側星柱群 (x: -400, y: 160)
+    this.drawStonePath(ctx, -400, 420, -400, 180);
     const westMegaliths = [
-      { x: 300, y: 160, h: 42, w: 18, color: '#64748b' },
-      { x: 350, y: 130, h: 54, w: 22, color: '#94a3b8' },
-      { x: 400, y: 160, h: 40, w: 18, color: '#64748b' }
+      { x: -450, y: 160, h: 42, w: 18, color: '#64748b' },
+      { x: -400, y: 130, h: 54, w: 22, color: '#94a3b8' },
+      { x: -350, y: 160, h: 40, w: 18, color: '#64748b' }
     ];
     for (const m of westMegaliths) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -6550,24 +6553,24 @@ class GameController {
       ctx.stroke();
     }
 
-    // 西方南側水岸觀景棧道 (x: 350, y: 700)
-    this.drawStonePath(ctx, 350, 420, 350, 710);
+    // 西方南側水岸觀景棧道 (x: -400, y: 700)
+    this.drawStonePath(ctx, -400, 420, -400, 710);
     ctx.fillStyle = '#78350f';
-    ctx.fillRect(300, 710, 100, 45);
+    ctx.fillRect(-450, 710, 100, 45);
     ctx.strokeStyle = '#92400e';
     ctx.lineWidth = 2;
-    ctx.strokeRect(300, 710, 100, 45);
+    ctx.strokeRect(-450, 710, 100, 45);
     ctx.fillStyle = '#e0e7ff';
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🔭 西方水岸眺望台', 350, 700);
+    ctx.fillText('🔭 西方水岸眺望台', -400, 700);
 
-    // 西方探險營地 (x: 480, y: 260)
+    // 西方探險營地 (x: -260, y: 260)
     ctx.fillStyle = '#475569';
     ctx.beginPath();
-    ctx.moveTo(450, 280);
-    ctx.lineTo(480, 230);
-    ctx.lineTo(510, 280);
+    ctx.moveTo(-290, 280);
+    ctx.lineTo(-260, 230);
+    ctx.lineTo(-230, 280);
     ctx.closePath();
     ctx.fillStyle = '#7c3aed';
     ctx.fill();
@@ -6577,24 +6580,24 @@ class GameController {
 
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
-    ctx.arc(525, 275, 6 + firePulse, 0, Math.PI * 2);
+    ctx.arc(-215, 275, 6 + firePulse, 0, Math.PI * 2);
     ctx.fill();
 
-    // 西方時空路標告示牌 (x: 250, y: 375)
+    // 西方時空路標告示牌 (x: -500, y: 375，中心在 -400, 394)
     ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
     ctx.strokeStyle = '#a855f7';
     ctx.lineWidth = 1.8;
     ctx.beginPath();
-    ctx.roundRect(250, 375, 200, 28, 6);
+    ctx.roundRect(-500, 375, 200, 28, 6);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#e9d5ff';
     ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('◀ 前方時空渡口 · 紀元星軌大道 🧭', 350, 394);
+    ctx.fillText('◀ 前方時空渡口 · 紀元星軌大道 🧭', -400, 394);
 
-    // 西方大道沿途路燈
-    const westLamps = [250, 350, 450, 550];
+    // 西方大道沿途路燈 (自城鎮西緣 -100 延伸至渡口 -550)
+    const westLamps = [-100, -250, -400, -550];
     for (const lx of westLamps) {
       this.drawStreetLanternPost(ctx, lx, 360);
       this.drawStreetLanternPost(ctx, lx, 480);
@@ -6786,11 +6789,11 @@ class GameController {
       }
     }
 
-    // ==================== 2. 西方時空回溯/漫遊渡口 (x: 220, y: 420) ====================
+    // ==================== 2. 西方時空回溯/漫遊渡口 (移至 x: -650, y: 420) ====================
     const prevEraIdx = curEraIdx > 0 ? curEraIdx - 1 : this.models.HISTORICAL_ERAS.length - 1;
     const prevEra = this.models.HISTORICAL_ERAS[prevEraIdx];
     if (prevEra) {
-      const pX = 220;
+      const pX = -650;
       const pY = 420;
 
       // 地面時空引力光環
