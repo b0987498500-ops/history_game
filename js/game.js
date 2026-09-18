@@ -951,11 +951,11 @@ class GameController {
 
     if (hasNextEra) {
       if (!isEraCompleted) {
-        // 🔒 尚未破關：東方邊界 x >= 2260 形成全屏垂直不可穿越的時空封印壁障！完全走不過去！
-        if (this.hero.x >= 2260) {
-          this.hero.x = 2260;
+        // 🔒 尚未破關：東方邊界 x >= 1840 形成時空封印壁障！
+        if (this.hero.x >= 1840) {
+          this.hero.x = 1840;
           this.hero.vx = -2.5;
-          if (this.hero.navTarget && this.hero.navTarget.x > 2250) {
+          if (this.hero.navTarget && this.hero.navTarget.x > 1830) {
             this.hero.navTarget = null;
           }
           if (!this._lastBarrierWarning || Date.now() - this._lastBarrierWarning > 2500) {
@@ -964,26 +964,23 @@ class GameController {
               if (window.soundFx.playCritical) window.soundFx.playCritical();
               else window.soundFx.playClick();
             }
-            const curEraPerspectives = this.currentEra ? this.currentEra.perspectives : [];
-            const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id)).length;
-            this.showToast(`🔒 尚未破關！需先通關當前時代【${this.currentEra.title}】全部角色（目前 ${doneCount}/${curEraPerspectives.length}），方可穿越時空前往下一年代！`, 4000);
-            this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 尚未破關！時空封印壁障無法通行', '#f43f5e', 22);
+            this.showToast(`🔒 尚未破關！需先做出當前時代【${this.currentEra.title}】的歷史抉擇，方可穿越時空前往下一年代！可查閱上方【📜 秘笈】！`, 4000);
+            this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 請先完成歷史抉擇任務！', '#f43f5e', 22);
           }
         }
       } else {
-        // ✨ 已破關：玩家一直往右走，踏入東方時空長河 (x >= 2300) 即可跨越至下一個年代！
-        if (this.hero.x >= 2300) {
+        // ✨ 已破關：玩家一直往右走，踏入東方時空渡口 (x >= 1860) 即可跨越至下一個年代！
+        if (this.hero.x >= 1860) {
           this.jumpToNextEraSpacetime(nextEra.id);
         }
       }
     }
 
-    // 檢查西方時空回溯渡口 (往回走/向左走至 x <= 200，非第 1 章時可回溯至上一時空)
-    if (curEraIdx > 0) {
-      const prevEra = this.models.HISTORICAL_ERAS[curEraIdx - 1];
-      if (this.hero.x <= 200) {
-        this.jumpToPrevEraSpacetime(prevEra.id);
-      }
+    // 檢查西方時空回溯渡口 (往回走/向左走至 x <= 240，可穿越至上一時空/循環時空)
+    const prevEraIdx = curEraIdx > 0 ? curEraIdx - 1 : this.models.HISTORICAL_ERAS.length - 1;
+    const prevEra = this.models.HISTORICAL_ERAS[prevEraIdx];
+    if (this.hero.x <= 240) {
+      this.jumpToPrevEraSpacetime(prevEra.id);
     }
 
     // 殘影衰減
@@ -1147,10 +1144,10 @@ class GameController {
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
     const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
     const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
-    const isNextUnlocked = hasNextEra && this.isEraUnlocked(curEraIdx + 1);
+    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted();
 
     if (!nearestZone && hasNextEra) {
-      const portalX = 2320;
+      const portalX = 1880;
       const portalY = 420;
       const d = Math.hypot(this.hero.x - portalX, this.hero.y - portalY);
       if (d < 150) {
@@ -1166,12 +1163,13 @@ class GameController {
     }
 
     // 檢查西方時空回溯門 (Prev Era Portal)
-    if (!nearestZone && curEraIdx > 0) {
-      const prevEra = this.models.HISTORICAL_ERAS[curEraIdx - 1];
-      const portalX = 200;
+    if (!nearestZone) {
+      const prevEraIdx = curEraIdx > 0 ? curEraIdx - 1 : this.models.HISTORICAL_ERAS.length - 1;
+      const prevEra = this.models.HISTORICAL_ERAS[prevEraIdx];
+      const portalX = 220;
       const portalY = 420;
       const d = Math.hypot(this.hero.x - portalX, this.hero.y - portalY);
-      if (d < 140) {
+      if (d < 150) {
         nearestZone = {
           isPrevSpacetimePortal: true,
           prevEra: prevEra,
@@ -4300,8 +4298,8 @@ class GameController {
     mctx.strokeStyle = 'rgba(100, 116, 139, 0.5)';
     mctx.lineWidth = 1.5;
     mctx.beginPath();
-    mctx.moveTo(260 * scaleX, 420 * scaleY);
-    mctx.lineTo(2320 * scaleX, 420 * scaleY);
+    mctx.moveTo(220 * scaleX, 420 * scaleY);
+    mctx.lineTo(1880 * scaleX, 420 * scaleY);
     mctx.stroke();
 
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
@@ -4314,24 +4312,26 @@ class GameController {
         mctx.strokeStyle = '#f43f5e';
         mctx.lineWidth = 1.5;
         mctx.beginPath();
-        mctx.moveTo(2260 * scaleX, 0);
-        mctx.lineTo(2260 * scaleX, this.worldHeight * scaleY);
+        mctx.moveTo(1840 * scaleX, 0);
+        mctx.lineTo(1840 * scaleX, this.worldHeight * scaleY);
         mctx.stroke();
       }
       mctx.fillStyle = isNextUnlocked ? '#a855f7' : '#e11d48';
       mctx.beginPath();
-      mctx.arc(2320 * scaleX, 420 * scaleY, isNextUnlocked ? 4.5 : 3.5, 0, Math.PI * 2);
+      mctx.arc(1880 * scaleX, 420 * scaleY, isNextUnlocked ? 4.5 : 3.5, 0, Math.PI * 2);
       mctx.fill();
       mctx.strokeStyle = isNextUnlocked ? '#38bdf8' : '#fda4af';
       mctx.lineWidth = 1.2;
       mctx.stroke();
     }
-    if (curEraIdx > 0) {
-      mctx.fillStyle = '#d97706';
-      mctx.beginPath();
-      mctx.arc(200 * scaleX, 420 * scaleY, 3, 0, Math.PI * 2);
-      mctx.fill();
-    }
+    // 西方時空渡口標註
+    mctx.fillStyle = '#38bdf8';
+    mctx.beginPath();
+    mctx.arc(220 * scaleX, 420 * scaleY, 3.5, 0, Math.PI * 2);
+    mctx.fill();
+    mctx.strokeStyle = '#c084fc';
+    mctx.lineWidth = 1.2;
+    mctx.stroke();
 
     // 標註英雄自身 (亮綠金光圓點)
     mctx.fillStyle = '#22c55e';
@@ -4420,9 +4420,9 @@ class GameController {
 
   setNavTarget(x, y, label = null) {
     let targetX = x;
-    if (!this.isCurrentEraCompleted() && targetX > 2250) {
-      targetX = 2250;
-      this.showToast('🔒 尚未破關，東方時空封印壁障無法通行！', 3000);
+    if (!this.isCurrentEraCompleted() && targetX > 1840) {
+      targetX = 1840;
+      this.showToast('🔒 尚未通關歷史任務，東方時空封印壁障無法通行！', 3000);
     }
     const clampedX = Math.max(50, Math.min(this.worldWidth - 50, targetX));
     const clampedY = Math.max(50, Math.min(this.worldHeight - 50, y));
@@ -4444,6 +4444,41 @@ class GameController {
   // 開啟行商秘笈 (常設免費文字指引，簡潔乾淨如圖一風格)
   openQuestSecretModal() {
     if (window.soundFx) window.soundFx.playClick();
+
+    const titleEl = document.getElementById('secret-quest-title');
+    const tipEl = document.getElementById('secret-quest-tip');
+    const loreEl = document.getElementById('secret-quest-lore');
+    const badgeEl = document.getElementById('secret-quest-badge');
+    const spacetimeBanner = document.getElementById('secret-spacetime-banner');
+    const spacetimeDesc = document.getElementById('secret-spacetime-desc');
+    const secretNavBtn = document.getElementById('secret-modal-nav-btn');
+    const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+
+    // 若本時代已破關：直接切換為【🌌 時空長河穿越秘笈】
+    if (this.isCurrentEraCompleted()) {
+      if (badgeEl) badgeEl.innerText = '✨ 時代通關指引';
+      if (titleEl) titleEl.innerText = '🌌 紀元星軌大道 · 時空穿越秘笈';
+      if (tipEl) {
+        tipEl.innerHTML = '👉 <strong>本時代歷史抉擇已圓滿通關！</strong>請沿著中央星軌大道<strong class="text-yellow-300 text-xl font-black">【一直往右走 ▶】</strong>，穿過紀元星軌大道踏入<strong>【東方時空渡口】</strong>光門，即可穿越至下一個歷史時代！<br><span class="text-xs text-amber-300 font-bold">（往左走亦可踏入【西方時空渡口】回溯/漫遊時空喔！）</span>';
+      }
+      if (loreEl) {
+        loreEl.innerText = '📜 歷史長河波瀾壯闊，下一個時代的歷史大門已為您開啟！向前奔馳踏入時空漩渦，引領新的歷史浪潮！';
+      }
+      if (spacetimeBanner) {
+        spacetimeBanner.className = 'p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/90 to-teal-950/90 border-2 border-emerald-400/80 mb-3 flex items-start gap-2.5 animate-pulse';
+      }
+      if (spacetimeDesc) {
+        spacetimeDesc.innerHTML = '✨ <strong class="text-emerald-300">時空渡口已啟動！</strong>請立即沿著大道<strong class="text-yellow-300">【一直往右走 ▶】</strong>踏入東方時空渡口光門，即可穿越至下一時代！';
+      }
+      if (secretNavBtn) {
+        secretNavBtn.innerHTML = '<span>🧭</span><span>引路前往東方渡口</span>';
+      }
+      const modal = document.getElementById('quest-secret-modal');
+      if (modal) modal.classList.remove('hidden');
+      return;
+    }
+
+    // 尚未破關：提供任務指引
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
     if (!currentNode) return;
 
@@ -4461,12 +4496,6 @@ class GameController {
     const northSouth = dy < -80 ? '北' : (dy > 80 ? '南' : '');
     const eastWest = dx < -80 ? '西' : (dx > 80 ? '東' : '');
     dirDesc = (northSouth && eastWest) ? `${northSouth}${eastWest}方` : (northSouth ? `${northSouth}方` : (eastWest ? `${eastWest}方` : '近處'));
-
-    // 標題與徽章：如 📜 熱蘭遮評議稅章秘笈 或 📜 1642 年秋 · 政務秘笈
-    const titleEl = document.getElementById('secret-quest-title');
-    const tipEl = document.getElementById('secret-quest-tip');
-    const loreEl = document.getElementById('secret-quest-lore');
-    const badgeEl = document.getElementById('secret-quest-badge');
 
     if (badgeEl) {
       if (this.state.roleType === 'bureaucrat') {
@@ -4515,9 +4544,14 @@ class GameController {
       }
     }
 
-    const secretNavBtn = document.getElementById('secret-modal-nav-btn');
+    if (spacetimeBanner) {
+      spacetimeBanner.className = 'p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/90 to-indigo-950/90 border border-purple-400/60 mb-3 flex items-start gap-2.5';
+    }
+    if (spacetimeDesc) {
+      spacetimeDesc.innerHTML = '完成本時代任務破關後，請沿著大道<strong class="text-yellow-300">【一直往右走 ▶】</strong>踏入東方時空渡口即可穿越至下一時代！（往左走亦可回溯時空喔！）';
+    }
+
     if (secretNavBtn) {
-      const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
       secretNavBtn.innerHTML = `<span>🧭</span><span>僱嚮導帶路 (10${curUnit})</span>`;
     }
 
@@ -4525,8 +4559,17 @@ class GameController {
     if (modal) modal.classList.remove('hidden');
   }
 
-  // 自動尋路功能 (依據時代花費貨幣僱用嚮導引路)
+  // 自動尋路功能 (依據時代花費貨幣僱用嚮導引路，破關後免費引路至時空渡口)
   autoNavigateToCurrentQuest() {
+    // 若本時代已通關：直接引路至東方時空渡口！
+    if (this.isCurrentEraCompleted()) {
+      const portalX = 1880;
+      const portalY = 420;
+      this.setNavTarget(portalX, portalY, '東方時空渡口');
+      this.showToast('🧭 嚮導引路：本時代已通關！請沿著大道【一直往右走 ▶】踏入時空渡口！', 4000);
+      return;
+    }
+
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
     if (!currentNode) return;
 
@@ -5368,8 +5411,11 @@ class GameController {
       minimapYear.innerText = this.currentEra.minimapYearBadge;
     }
 
+    const isCompleted = this.isCurrentEraCompleted();
     const navBtnText = document.getElementById('nav-btn-text');
-    if (navBtnText) navBtnText.innerText = `尋路 (10${curUnit})`;
+    if (navBtnText) {
+      navBtnText.innerText = isCompleted ? '尋路 (時空渡口)' : `尋路 (10${curUnit})`;
+    }
 
     const hintWorkText = document.getElementById('hint-work-text');
     if (hintWorkText) hintWorkText.innerText = workName;
@@ -5386,17 +5432,23 @@ class GameController {
     // 3. 頂部任務條排版 (安全容錯拆分，防止 undefined 異常中斷渲染)
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
     const eraTag = document.getElementById('quest-era-tag');
-    if (eraTag) {
-      if (currentNode && currentNode.era) {
-        const parts = currentNode.era.split(' · ');
-        eraTag.innerText = parts[0] || currentNode.era;
-      } else if (this.currentEra) {
-        eraTag.innerText = this.currentEra.year || '當前時代';
-      }
-    }
     const titleText = document.getElementById('quest-title-text');
-    if (titleText) {
-      titleText.innerText = currentNode ? currentNode.title : '操縱角色前往聚落工坊做出歷史決策！';
+
+    if (isCompleted) {
+      if (eraTag) eraTag.innerText = '時空渡口已啟動';
+      if (titleText) titleText.innerText = '✨ 本時代任務已通關！請【一直往右走 ▶】前往時空渡口穿越至下一時代！';
+    } else {
+      if (eraTag) {
+        if (currentNode && currentNode.era) {
+          const parts = currentNode.era.split(' · ');
+          eraTag.innerText = parts[0] || currentNode.era;
+        } else if (this.currentEra) {
+          eraTag.innerText = this.currentEra.year || '當前時代';
+        }
+      }
+      if (titleText) {
+        titleText.innerText = currentNode ? currentNode.title : '操縱角色前往聚落工坊做出歷史決策！';
+      }
     }
 
     // 當前角色階段即時存檔 (確保刷新頁面進度不遺失)
@@ -5877,12 +5929,11 @@ class GameController {
         return true;
       }
     }
-    // 3. 檢查本年代角色通關數
+    // 3. 檢查本年代角色通關數：只要通關 1 位角色（當前歷史主線完成），即視為本時代已破關，開放時空穿越！
     const curEraPerspectives = this.currentEra.perspectives || [];
     if (curEraPerspectives.length > 0 && this.playerMaster && this.playerMaster.completedPerspectives) {
       const doneCount = curEraPerspectives.filter(p => this.playerMaster.completedPerspectives.includes(p.id)).length;
-      const targetCount = Math.min(3, curEraPerspectives.length);
-      if (doneCount >= targetCount) {
+      if (doneCount >= 1) {
         if (!this.playerMaster.completedEras.includes(this.currentEra.id)) {
           this.playerMaster.completedEras.push(this.currentEra.id);
         }
@@ -6323,7 +6374,8 @@ class GameController {
   drawPlaygroundBoulevard(ctx) {
     ctx.save();
 
-    // 1. 中途紀元星盤廣場 (Chrono Astrolabe Plaza, x: 1750, y: 420)
+    // ==================== 1. 東方星軌大道與中途廣場 (x: 1750, y: 420) ====================
+    // 東方星盤廣場
     ctx.beginPath();
     ctx.arc(1750, 420, 95, 0, Math.PI * 2);
     ctx.fillStyle = '#1e293b';
@@ -6339,7 +6391,7 @@ class GameController {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // 星盤符文與羅盤指針雕刻
+    // 星盤符文
     ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
     ctx.lineWidth = 1.5;
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
@@ -6349,7 +6401,7 @@ class GameController {
       ctx.stroke();
     }
 
-    // 中央巨石日晷 (Chrono Sundial)
+    // 東方中央巨石日晷
     ctx.fillStyle = '#475569';
     ctx.beginPath();
     ctx.arc(1750, 420, 20, 0, Math.PI * 2);
@@ -6358,7 +6410,7 @@ class GameController {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 日晷指針與動態陰影
+    // 日晷指針
     const shadowAngle = this.ambientLightTick * 0.3;
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.lineWidth = 4;
@@ -6372,10 +6424,8 @@ class GameController {
     ctx.arc(1750, 420, 5, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. 北側巨石陣林與休憩涼亭 (x: 1750, y: 160)
+    // 東方北側巨石柱群 (x: 1750, y: 160)
     this.drawStonePath(ctx, 1750, 420, 1750, 180);
-    
-    // 史前巨石星柱群
     const megaliths = [
       { x: 1680, y: 160, h: 42, w: 18, color: '#64748b' },
       { x: 1750, y: 130, h: 56, w: 22, color: '#94a3b8' },
@@ -6394,40 +6444,21 @@ class GameController {
       ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-
-      // 柱面神秘符文
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(m.x, m.y - m.h / 4);
-      ctx.lineTo(m.x, m.y + m.h / 4);
-      ctx.moveTo(m.x - 4, m.y);
-      ctx.lineTo(m.x + 4, m.y);
-      ctx.stroke();
     }
 
-    // 3. 南側水岸觀景棧道與眺望鏡 (x: 1750, y: 700)
+    // 東方南側水岸觀景棧道 (x: 1750, y: 700)
     this.drawStonePath(ctx, 1750, 420, 1750, 710);
     ctx.fillStyle = '#78350f';
     ctx.fillRect(1700, 710, 100, 45);
     ctx.strokeStyle = '#92400e';
     ctx.lineWidth = 2;
     ctx.strokeRect(1700, 710, 100, 45);
-
-    // 眺望鏡標籤
     ctx.fillStyle = '#bae6fd';
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🔭 水岸長河眺望台', 1750, 700);
+    ctx.fillText('🔭 東方水岸眺望台', 1750, 700);
 
-    // 4. 大道沿途路燈與景觀裝飾 (x: 1350, 1550, 1950, 2150)
-    const avenueLamps = [1350, 1550, 1950, 2150];
-    for (const lx of avenueLamps) {
-      this.drawStreetLanternPost(ctx, lx, 360);
-      this.drawStreetLanternPost(ctx, lx, 480);
-    }
-
-    // 5. 探險營地 (x: 1450, y: 260)
+    // 東方探險營地 (x: 1450, y: 260)
     ctx.fillStyle = '#475569';
     ctx.beginPath();
     ctx.moveTo(1420, 280);
@@ -6440,21 +6471,16 @@ class GameController {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // 營火
     const firePulse = Math.sin(this.ambientLightTick * 6) * 3;
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
     ctx.arc(1505, 275, 7 + firePulse, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath();
-    ctx.arc(1505, 273, 4 + firePulse * 0.5, 0, Math.PI * 2);
-    ctx.fill();
 
-    // 6. 巨幅時空路標告示
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    // 東方時空路標告示牌 (x: 1650, y: 375)
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
     ctx.strokeStyle = '#ca8a04';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.roundRect(1650, 375, 200, 28, 6);
     ctx.fill();
@@ -6463,6 +6489,116 @@ class GameController {
     ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('🧭 紀元星軌大道 · 前方時空渡口 ▶', 1750, 394);
+
+    // 東方大道沿途路燈
+    const eastLamps = [1350, 1550, 1750, 1850];
+    for (const lx of eastLamps) {
+      this.drawStreetLanternPost(ctx, lx, 360);
+      this.drawStreetLanternPost(ctx, lx, 480);
+    }
+
+    // ==================== 2. 西方星軌大道與中途廣場 (x: 350, y: 420) ====================
+    // 西方星盤廣場
+    ctx.beginPath();
+    ctx.arc(350, 420, 85, 0, Math.PI * 2);
+    ctx.fillStyle = '#1e293b';
+    ctx.fill();
+    ctx.strokeStyle = '#c084fc';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(350, 420, 65, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(216, 180, 254, 0.4)';
+    ctx.setLineDash([6, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 西方中央紀元日晷
+    ctx.fillStyle = '#334155';
+    ctx.beginPath();
+    ctx.arc(350, 420, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#a855f7';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#e9d5ff';
+    ctx.beginPath();
+    ctx.arc(350, 420, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 西方北側星柱群 (x: 350, y: 160)
+    this.drawStonePath(ctx, 350, 420, 350, 180);
+    const westMegaliths = [
+      { x: 300, y: 160, h: 42, w: 18, color: '#64748b' },
+      { x: 350, y: 130, h: 54, w: 22, color: '#94a3b8' },
+      { x: 400, y: 160, h: 40, w: 18, color: '#64748b' }
+    ];
+    for (const m of westMegaliths) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(m.x + 6, m.y + m.h / 2, m.w * 0.9, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = m.color;
+      ctx.beginPath();
+      ctx.roundRect(m.x - m.w / 2, m.y - m.h / 2, m.w, m.h, 5);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // 西方南側水岸觀景棧道 (x: 350, y: 700)
+    this.drawStonePath(ctx, 350, 420, 350, 710);
+    ctx.fillStyle = '#78350f';
+    ctx.fillRect(300, 710, 100, 45);
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(300, 710, 100, 45);
+    ctx.fillStyle = '#e0e7ff';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔭 西方水岸眺望台', 350, 700);
+
+    // 西方探險營地 (x: 480, y: 260)
+    ctx.fillStyle = '#475569';
+    ctx.beginPath();
+    ctx.moveTo(450, 280);
+    ctx.lineTo(480, 230);
+    ctx.lineTo(510, 280);
+    ctx.closePath();
+    ctx.fillStyle = '#7c3aed';
+    ctx.fill();
+    ctx.strokeStyle = '#c4b5fd';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.arc(525, 275, 6 + firePulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 西方時空路標告示牌 (x: 250, y: 375)
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+    ctx.strokeStyle = '#a855f7';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.roundRect(250, 375, 200, 28, 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#e9d5ff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('◀ 前方時空渡口 · 紀元星軌大道 🧭', 350, 394);
+
+    // 西方大道沿途路燈
+    const westLamps = [250, 350, 450, 550];
+    for (const lx of westLamps) {
+      this.drawStreetLanternPost(ctx, lx, 360);
+      this.drawStreetLanternPost(ctx, lx, 480);
+    }
 
     ctx.restore();
   }
@@ -6475,14 +6611,14 @@ class GameController {
 
     ctx.save();
 
-    // ==================== 1. 東方時空長河躍遷渡口 (x: 2320, y: 420) 與封印壁障 ====================
+    // ==================== 1. 東方時空長河躍遷渡口 (x: 1880, y: 420) 與封印壁障 ====================
     if (hasNextEra) {
-      const pX = 2320;
+      const pX = 1880;
       const pY = 420;
 
-      // 若尚未破關：繪製垂直貫通天地 (x: 2260) 的「時空封印壁障能量結界」
+      // 若尚未破關：繪製垂直貫通天地 (x: 1840) 的「時空封印壁障能量結界」
       if (!isNextUnlocked) {
-        const barrierX = 2260;
+        const barrierX = 1840;
         const bPulse = Math.sin(this.ambientLightTick * 4) * 0.12;
 
         // 1. 全地圖垂直光幕 (遮蔽東方時空)
@@ -6505,7 +6641,7 @@ class GameController {
         ctx.lineTo(barrierX, this.worldHeight + 200);
         ctx.stroke();
 
-        // 3. 封印力場菱形符文網 (在道路交接處)
+        // 3. 封印力場菱形符文網
         ctx.strokeStyle = 'rgba(251, 113, 133, 0.4)';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([12, 12]);
@@ -6516,7 +6652,7 @@ class GameController {
         ctx.setLineDash([]);
         ctx.restore();
 
-        // 4. 壁障中央巨型封印符文徽記 (x: 2260, y: 420)
+        // 4. 壁障中央巨型封印符文徽記 (x: 1840, y: 420)
         ctx.save();
         ctx.beginPath();
         ctx.arc(barrierX, 420, 38, 0, Math.PI * 2);
@@ -6587,9 +6723,8 @@ class GameController {
         ctx.fill();
       }
 
-      // 門扉中央時空漩渦 (Vortex / Barrier Veil)
+      // 門扉中央時空漩渦
       if (isNextUnlocked) {
-        // ✨ 已破關：耀眼時空裂隙
         const vortexGrad = ctx.createRadialGradient(pX, pY, 5, pX, pY, 55);
         vortexGrad.addColorStop(0, '#ffffff');
         vortexGrad.addColorStop(0.3, '#38bdf8');
@@ -6606,7 +6741,6 @@ class GameController {
         ctx.arc(pX, pY, 8 + Math.sin(this.ambientLightTick * 6) * 3, 0, Math.PI * 2);
         ctx.fill();
       } else {
-        // 🔒 尚未破關：時空封印壁障
         ctx.fillStyle = 'rgba(225, 29, 72, 0.25)';
         ctx.beginPath();
         ctx.ellipse(pX, pY, 45, 60, 0, 0, Math.PI * 2);
@@ -6615,14 +6749,13 @@ class GameController {
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // 封印鎖頭標記
         ctx.font = 'bold 28px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('🔒', pX, pY);
       }
 
-      // 懸浮告示大牌匾 (Overhead Plaque)
+      // 懸浮告示大牌匾
       const bannerY = pY - 95;
       const bannerW = 290;
       const bannerH = 46;
@@ -6642,56 +6775,101 @@ class GameController {
         ctx.fillText(`🌌 跨越時空 ▶ 前往【${nextEra.title}】`, pX, bannerY + 18);
         ctx.fillStyle = '#38bdf8';
         ctx.font = 'bold 11px sans-serif';
-        ctx.fillText('✨ 已破關！一直往右走即可跨入下一時代', pX, bannerY + 36);
+        ctx.fillText('✨ 已通關！一直往右走即可跨入下一時代', pX, bannerY + 36);
       } else {
-        const curEraPerspectives = this.currentEra ? this.currentEra.perspectives : [];
-        const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id)).length;
         ctx.fillStyle = '#fca5a5';
         ctx.font = 'bold 14px "Noto Serif TC", serif';
         ctx.fillText(`🔒 時空界線封印 · 前方【${nextEra.title}】`, pX, bannerY + 18);
         ctx.fillStyle = '#fda4af';
         ctx.font = 'bold 11px sans-serif';
-        ctx.fillText(`未破關走不過去（進度 ${doneCount}/${curEraPerspectives.length} 角色）`, pX, bannerY + 36);
+        ctx.fillText('需先完成當前歷史抉擇任務，方可通行', pX, bannerY + 36);
       }
     }
 
-    // ==================== 2. 西方時空回溯渡口 (x: 200, y: 420) ====================
-    if (curEraIdx > 0) {
-      const prevEra = this.models.HISTORICAL_ERAS[curEraIdx - 1];
-      const pX = 200;
+    // ==================== 2. 西方時空回溯/漫遊渡口 (x: 220, y: 420) ====================
+    const prevEraIdx = curEraIdx > 0 ? curEraIdx - 1 : this.models.HISTORICAL_ERAS.length - 1;
+    const prevEra = this.models.HISTORICAL_ERAS[prevEraIdx];
+    if (prevEra) {
+      const pX = 220;
       const pY = 420;
 
+      // 地面時空引力光環
+      const pulse = Math.sin(this.ambientLightTick * 2.8) * 5;
       ctx.beginPath();
-      ctx.arc(pX, pY, 50, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(217, 119, 6, 0.15)';
+      ctx.arc(pX, pY, 65 + pulse, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(147, 51, 234, 0.15)';
       ctx.fill();
-      ctx.strokeStyle = '#d97706';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('🕰️', pX, pY);
-
-      // 牌匾
-      const bY = pY - 65;
-      const bW = 200;
-      const bH = 34;
-      ctx.fillStyle = '#0b1120';
-      ctx.strokeStyle = '#d97706';
+      // 旋轉符文內圈
+      ctx.save();
+      ctx.translate(pX, pY);
+      ctx.rotate(-this.ambientLightTick * 0.8);
+      ctx.beginPath();
+      ctx.arc(0, 0, 44, 0, Math.PI * 2);
+      ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 1.5;
+      ctx.setLineDash([7, 7]);
+      ctx.stroke();
+      ctx.restore();
+
+      // 雙座方尖碑
+      const pillarW = 24;
+      const pillarH = 130;
+      const pillarOffset = 60;
+      for (const side of [-1, 1]) {
+        const pilX = pX + side * pillarOffset;
+        const pilY = pY - pillarH / 2;
+
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(pilX - pillarW / 2, pilY, pillarW, pillarH, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        // 浮石
+        const floatY = pilY - 12 + Math.sin(this.ambientLightTick * 3 - side) * 4;
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(pilX, floatY, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 中央時空漩渦
+      const vortexGrad = ctx.createRadialGradient(pX, pY, 4, pX, pY, 50);
+      vortexGrad.addColorStop(0, '#ffffff');
+      vortexGrad.addColorStop(0.3, '#c084fc');
+      vortexGrad.addColorStop(0.7, '#38bdf8');
+      vortexGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = vortexGrad;
       ctx.beginPath();
-      ctx.roundRect(pX - bW / 2, bY, bW, bH, 8);
+      ctx.ellipse(pX, pY, 40, 55, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 懸浮告示牌匾
+      const bannerY = pY - 90;
+      const bannerW = 270;
+      const bannerH = 44;
+
+      ctx.fillStyle = '#0b1120';
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(pX - bannerW / 2, bannerY, bannerW, bannerH, 10);
       ctx.fill();
       ctx.stroke();
 
+      ctx.textAlign = 'center';
       ctx.fillStyle = '#fed7aa';
-      ctx.font = 'bold 12px "Noto Serif TC", serif';
-      ctx.fillText(`🕰️ 時空回溯 ◀ 【${prevEra.title}】`, pX, bY + 16);
-      ctx.fillStyle = '#fdba74';
-      ctx.font = '10px sans-serif';
-      ctx.fillText('向左踏入即可重溫歷史', pX, bY + 28);
+      ctx.font = 'bold 14px "Noto Serif TC", serif';
+      ctx.fillText(`🕰️ 跨越時空 ◀ 前往【${prevEra.title}】`, pX, bannerY + 17);
+      ctx.fillStyle = '#c084fc';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('✨ 一直往左走即可跨入此歷史時代', pX, bannerY + 34);
     }
 
     ctx.restore();

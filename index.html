@@ -584,12 +584,26 @@
       </div>
 
       <!-- 卡片 1: 遊戲通關指引 (簡潔一句話指引去哪、做什麼，就像圖一) -->
-      <div class="p-4 sm:p-5 rounded-2xl bg-amber-900/50 border border-amber-500/50 mb-4">
+      <div class="p-4 sm:p-5 rounded-2xl bg-amber-900/50 border border-amber-500/50 mb-3">
         <div class="flex items-center gap-2 text-lg sm:text-xl font-black text-amber-300 mb-2">
           <span>💡</span>
           <span>遊戲通關指引</span>
         </div>
         <p id="secret-quest-tip" class="text-base sm:text-lg font-bold text-yellow-100 leading-relaxed"></p>
+      </div>
+
+      <!-- 卡片 1.5: 時空穿越秘笈指引 (提醒玩家一直往右走進入時空渡口) -->
+      <div id="secret-spacetime-banner" class="p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/90 to-indigo-950/90 border border-purple-400/60 mb-3 flex items-start gap-2.5">
+        <span class="text-2xl shrink-0">🌌</span>
+        <div class="text-xs sm:text-sm">
+          <div class="font-black text-purple-300 flex items-center gap-1.5">
+            <span>時空長河穿越秘笈</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/30 text-purple-200 border border-purple-400/40">關鍵指引</span>
+          </div>
+          <div id="secret-spacetime-desc" class="text-purple-100 font-bold mt-1 leading-relaxed">
+            完成本時代任務破關後，請沿著大道<span class="text-yellow-300 font-black">【一直往右走 ▶】</span>踏入東方時空渡口即可穿越至下一時代！（往左走亦可回溯時空喔！）
+          </div>
+        </div>
       </div>
 
       <!-- 卡片 2: 真實歷史脈絡 (簡潔精煉史實背景，就像圖一) -->
@@ -686,8 +700,22 @@
         </div>
       </div>
 
-      <div class="p-4 rounded-xl bg-amber-950/40 border border-amber-500/30 mb-6">
+      <div class="p-4 rounded-xl bg-amber-950/40 border border-amber-500/30 mb-4">
         <p id="report-summary" class="text-xs sm:text-sm text-amber-200 leading-relaxed"></p>
+      </div>
+
+      <!-- 時空長河躍遷指引提示條 (明確告訴玩家往右走進入渡口穿越) -->
+      <div class="p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/90 to-indigo-950/90 border border-purple-400/60 mb-5 flex items-center justify-between gap-3 text-left">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">🌌</span>
+          <div>
+            <div class="font-black text-purple-200 text-xs sm:text-sm">時空長河渡口已開啟！</div>
+            <div class="text-purple-300 font-bold text-[11px] sm:text-xs">返回地圖後【一直往右走 ▶】即可踏入渡口穿越至下一時代！</div>
+          </div>
+        </div>
+        <button onclick="game.closeModal('settlement-modal'); game.autoNavigateToCurrentQuest();" class="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shrink-0 whitespace-nowrap shadow-md transition-transform active:scale-95 cursor-pointer">
+          🧭 引路前往
+        </button>
       </div>
 
       <div class="space-y-3">
