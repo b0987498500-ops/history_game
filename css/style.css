@@ -188,11 +188,14 @@ html, body {
 .quest-pill {
   background: linear-gradient(90deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.98) 15%, rgba(15, 23, 42, 0.98) 85%, rgba(15, 23, 42, 0.94));
   border: 2px solid rgba(245, 158, 11, 0.75);
-  padding: 5px 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.8);
-  overflow: hidden;
+  padding: 4px 16px 4px 12px; /* 右側保留 16px 充裕內距，保證按鈕絕不觸碰或被右側膠囊圓弧切邊 */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
   max-width: 100%;
   border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 @media (max-width: 900px) {
@@ -205,7 +208,29 @@ html, body {
     margin: 0 4px;
   }
   .quest-pill {
-    padding: 4px 10px;
+    padding: 4px 14px 4px 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .moba-header {
+    padding: 6px 8px 6px 115px;
+    gap: 6px;
+  }
+  .minimap-container {
+    width: 105px;
+    height: 105px;
+    top: 8px;
+    left: 8px;
+    border-radius: 16px;
+  }
+  .event-quest-banner {
+    max-width: 100%;
+    margin: 0 2px;
+  }
+  .quest-pill {
+    padding: 3px 12px 3px 8px;
+    gap: 6px;
   }
 }
 

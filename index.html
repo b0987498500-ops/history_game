@@ -100,21 +100,21 @@
   <header class="moba-header">
     <!-- 中央歷史決策任務導引條 (支援點擊開啟行商秘笈思考，防文字碰撞) -->
     <div class="event-quest-banner" onclick="game.openQuestSecretModal()" title="點擊查閱【📜 情報秘笈】當前商機與任務指引！">
-      <div class="quest-pill flex items-center justify-between gap-2 py-1 px-3 sm:px-4 cursor-pointer hover:border-amber-400 transition-colors">
+      <div class="quest-pill cursor-pointer hover:border-amber-400 transition-colors">
         <div class="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
           <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0"></span>
           <span id="quest-era-tag" class="font-black text-amber-300 font-serif text-xs sm:text-sm px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 whitespace-nowrap shrink-0">舊石器時代</span>
           <span class="text-amber-500 font-black shrink-0">|</span>
           <span id="quest-title-text" class="text-amber-100 font-extrabold text-xs sm:text-sm truncate min-w-0 flex-1">操縱角色前往聚落工坊做出歷史決策！</span>
         </div>
-        <div class="flex items-center gap-1.5 shrink-0 ml-1">
+        <div class="flex items-center gap-1.5 shrink-0">
           <!-- 秘笈按鈕：免費且常設，讓玩家閱讀文字線索自己思考去哪裡 -->
-          <button onclick="event.stopPropagation(); game.openQuestSecretModal()" class="px-2.5 py-1 rounded-full bg-amber-500/30 hover:bg-amber-500/50 text-amber-200 text-xs font-black border border-amber-400/80 shadow transition-all active:scale-95" title="免費查閱情報秘笈任務線索">
+          <button onclick="event.stopPropagation(); game.openQuestSecretModal()" class="h-7 px-2.5 rounded-full bg-amber-950/70 hover:bg-amber-900/90 text-amber-200 text-xs font-black border border-amber-400/80 shadow transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap shrink-0" title="免費查閱情報秘笈任務線索">
             <span>📜</span>
             <span>秘笈</span>
           </button>
           <!-- 尋路按鈕：需花費 10 單位資財僱用嚮導引路 -->
-          <button id="btn-auto-nav" onclick="event.stopPropagation(); game.autoNavigateToCurrentQuest()" class="px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs shadow flex items-center gap-1 transition-transform active:scale-95" title="僱用嚮導引路">
+          <button id="btn-auto-nav" onclick="event.stopPropagation(); game.autoNavigateToCurrentQuest()" class="h-7 px-2.5 sm:px-3 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs shadow-md border border-amber-300 flex items-center gap-1 transition-all active:scale-95 whitespace-nowrap shrink-0" title="僱用嚮導引路">
             <span>🧭</span>
             <span id="nav-btn-text">尋路 (10玉貝)</span>
           </button>
