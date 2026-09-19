@@ -4282,14 +4282,14 @@ class GameController {
       mctx.lineTo(toMapX(1840), this.worldHeight * scaleY);
       mctx.stroke();
     }
-      mctx.fillStyle = isNextUnlocked ? '#a855f7' : '#e11d48';
-      mctx.beginPath();
-      mctx.arc(toMapX(1880), 420 * scaleY, isNextUnlocked ? 4.5 : 3.5, 0, Math.PI * 2);
-      mctx.fill();
-      mctx.strokeStyle = isNextUnlocked ? '#38bdf8' : '#fda4af';
-      mctx.lineWidth = 1.2;
-      mctx.stroke();
-    }
+    mctx.fillStyle = isNextUnlocked ? '#a855f7' : '#e11d48';
+    mctx.beginPath();
+    mctx.arc(toMapX(1880), 420 * scaleY, isNextUnlocked ? 4.5 : 3.5, 0, Math.PI * 2);
+    mctx.fill();
+    mctx.strokeStyle = isNextUnlocked ? '#38bdf8' : '#fda4af';
+    mctx.lineWidth = 1.2;
+    mctx.stroke();
+
     // 西方時空渡口標註 (-650)
     mctx.fillStyle = '#38bdf8';
     mctx.beginPath();
