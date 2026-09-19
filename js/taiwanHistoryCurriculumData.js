@@ -1119,7 +1119,7 @@
           id: 'opt_liu_build_railway',
           targetLocationId: 'loc_customs',
           actionText: '【拍板興築鐵路】開鑿獅球嶺隧道，鋪設基隆至新竹蒸汽鐵路！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_liu_railway_blueprint',
           isHistorical: true,
           baseCost: 120,
@@ -1171,7 +1171,7 @@
           id: 'opt_dodd_invest_tea',
           targetLocationId: 'loc_tea_firm',
           actionText: '【引進安溪焙茶師與融資茶農】與李春生合作，精焙 Formosa Oolong 直銷紐約！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_dodd_tea_contract',
           isHistorical: true,
           baseCost: 100,
@@ -1223,7 +1223,7 @@
           id: 'opt_chiang_legal_enlightenment',
           targetLocationId: 'loc_tea_firm',
           actionText: '【創立臺灣文化協會與《臺灣民報》】以合法演講、讀報社與話劇啟發大眾民智！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_clinical_notes',
           isHistorical: true,
           baseCost: 80,
@@ -1275,7 +1275,7 @@
           id: 'opt_hatta_three_year_rotation',
           targetLocationId: 'loc_customs',
           actionText: '【興建烏山頭水庫＋實施三年輪作給水法】分區輪流給水種植水稻、甘蔗與雜糧！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_wusanto_blueprint',
           isHistorical: true,
           baseCost: 110,
@@ -1326,7 +1326,7 @@
           id: 'opt_peinan_craft_jade',
           targetLocationId: 'loc_sugar_guild',
           actionText: '【砂繩細磨臺灣玉玦】以竹管與石英砂慢工精琢，開創南島航海玉器交換圈！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_peinan_jade',
           isHistorical: true,
           baseCost: 80,
@@ -1378,7 +1378,7 @@
           id: 'opt_shisanhang_smelt',
           targetLocationId: 'loc_smuggler',
           actionText: '【鼓動風箱煉熟鐵】鍛造鐵質箭鏃與農具，與南洋商船以鐵器交換玻璃珠！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_shisanhang_bellows',
           isHistorical: true,
           baseCost: 90,
@@ -1430,7 +1430,7 @@
           id: 'opt_amis_age_rank_defense',
           targetLocationId: 'loc_customs',
           actionText: '【啟動青年年齡階級巡防】母系長老統籌祭儀穀糧，年齡階級青年勇衛部落！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_amis_age_rank',
           isHistorical: true,
           baseCost: 70,
@@ -1482,7 +1482,7 @@
           id: 'opt_coyett_fortify_and_tax',
           targetLocationId: 'loc_customs',
           actionText: '【鞏固熱蘭遮要塞＋整飭海港關稅】嚴查走私逃稅，修葺城堡砲台防線！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_voc_tariff',
           isHistorical: true,
           baseCost: 120,
@@ -1534,7 +1534,7 @@
           id: 'opt_guo_strike_oppression',
           targetLocationId: 'loc_sugar_guild',
           actionText: '【號召墾民揭竿起事】攻打普羅民遮城，抗擊荷蘭殖民者人頭苛稅！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           actionIcon: '⚔️',
           buttonText: '反抗荷蘭人',
           requiredClueId: 'clue_voc_poll_tax',
@@ -1590,7 +1590,7 @@
           id: 'opt_chen_build_school_salt',
           targetLocationId: 'loc_customs',
           actionText: '【建臺南孔廟創科舉＋推淋鹵曬鹽與軍屯】寓兵於農自給自足，奠定漢文化全臺首學！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_chen_confucian_temple',
           isHistorical: true,
           baseCost: 100,
@@ -1642,7 +1642,7 @@
           id: 'opt_zheng_jing_eic_treaty',
           targetLocationId: 'loc_tea_firm',
           actionText: '【與英國東印度公司簽訂通商合約】准許英商在臺設立商館，採購火藥軍械！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_zheng_eic_treaty',
           isHistorical: true,
           baseCost: 110,
@@ -1694,7 +1694,7 @@
           id: 'opt_shi_memorial_keep_taiwan',
           targetLocationId: 'loc_customs',
           actionText: '【上呈《臺灣棄留疏》力陳海防門戶】力爭臺灣不可棄，促成設一府三縣納入版圖！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_shi_memorial_draft',
           isHistorical: true,
           baseCost: 100,
@@ -1746,7 +1746,7 @@
           id: 'opt_shi_use_shigou_method',
           targetLocationId: 'loc_tea_firm',
           actionText: '【採納林先生水籠石笱工法】以竹編石笱定錨分水，大圳滔滔灌溉彰化十三堡！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_babao_canal_map',
           isHistorical: true,
           baseCost: 110,
@@ -1798,7 +1798,7 @@
           id: 'opt_zhu_uprising',
           targetLocationId: 'loc_customs',
           actionText: '【率眾起義攻克臺灣府城】反抗貪官暴斂，以「中興大元帥」號召全島同胞！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_zhu_yigui_banner',
           isHistorical: true,
           baseCost: 80,
@@ -1850,7 +1850,7 @@
           id: 'opt_jiao_coordinate_trade',
           targetLocationId: 'loc_sugar_guild',
           actionText: '【訂立郊商規約調解械鬥】統籌對渡帆船配額，穩定米糖收購價格護商路！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_jiao_guild_seal',
           isHistorical: true,
           baseCost: 100,
@@ -1902,7 +1902,7 @@
           id: 'opt_shen_active_defense',
           targetLocationId: 'loc_customs',
           actionText: '【築億載金城＋廢渡臺禁令與開山撫番】配備西洋巨砲，闢建北中南橫貫道路！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_shen_coastal_fort',
           isHistorical: true,
           baseCost: 110,
@@ -1954,7 +1954,7 @@
           id: 'opt_mona_ancestral_fight',
           targetLocationId: 'loc_smuggler',
           actionText: '【發動霧社抗暴維護祖靈尊嚴】在彩虹橋前誓死抗爭，震撼殖民政府理蕃政策！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_mona_ancestral_oath',
           isHistorical: true,
           baseCost: 90,
@@ -2006,7 +2006,7 @@
           id: 'opt_chen_cheng_three_stage_reform',
           targetLocationId: 'loc_customs',
           actionText: '【落實三七五減租與耕者有其田】地租降至37.5%，徵收地主超額土地放領佃農！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_land_reform_order',
           isHistorical: true,
           baseCost: 100,
@@ -2058,7 +2058,7 @@
           id: 'opt_sun_build_hsinchu_park',
           targetLocationId: 'loc_tea_firm',
           actionText: '【創設新竹科學園區引進晶圓代工】延攬海外學人，打造臺灣半導體高科技矽島！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_hsinchu_park_charter',
           isHistorical: true,
           baseCost: 120,
@@ -2110,7 +2110,7 @@
           id: 'opt_lee_constitutional_reform',
           targetLocationId: 'loc_customs',
           actionText: '【終止動員戡亂＋推動國會改選與全民總統直選】順應野百合學運民意，和平完成民主寧靜革命！',
-          badge: '👑 史實決策 (推薦)',
+          badge: '👑 史實決策',
           requiredClueId: 'clue_constitutional_reform',
           isHistorical: true,
           baseCost: 110,
@@ -2157,8 +2157,8 @@
       name: '八仙洞海蝕洞穴敲砸石核',
       icon: '🪨',
       rarity: 'SSR 遠古曙光',
-      gameplayTip: '👉 前往【八仙洞海蝕洞穴】敲擊礫石打製石器，採集海產並燃起柴火防範野獸！',
-      historicalLore: '📜 長濱文化為臺灣已知最古老的舊石器時代文化，以打製石器與用火遺跡聞名。',
+      gameplayTip: '👉 前往【八仙洞海蝕洞穴】打製石器、燃起火堆維持生計。',
+      historicalLore: '長濱文化為臺灣已知最古老舊石器時代文化，以打製石器與用火遺跡聞名。',
       howToGet: '長濱敲砸獵人開局隨身錦囊'
     },
     clue_peinan_jade: {
@@ -2166,8 +2166,8 @@
       name: '卑南文化玉玦磨製秘卷',
       icon: '📿',
       rarity: 'SSR 史前工藝',
-      gameplayTip: '👉 前往【卑南玉玦琢磨工坊】以石英砂與竹管精磨臺灣閃玉，建立史前南島航海貿易圈！',
-      historicalLore: '📜 卑南遺址出土大量精美玉玦與石板棺，證明新石器晚期臺灣玉器工藝已享譽東南亞。',
+      gameplayTip: '👉 前往【卑南玉玦琢磨工坊】慢工精磨臺灣玉玦。',
+      historicalLore: '卑南遺址出土大量精美玉玦與石板棺，證明新石器晚期臺灣玉器工藝精湛。',
       howToGet: '卑南玉工長老開局隨身錦囊 / 磨玉小遊戲'
     },
     clue_shisanhang_bellows: {
@@ -2175,8 +2175,8 @@
       name: '十三行冶鐵高爐風門圖',
       icon: '🔥',
       rarity: 'SSR 冶鐵秘要',
-      gameplayTip: '👉 前往【十三行高溫煉鐵工棚】操控風箱鍛造熟鐵器，與南洋商船以鐵器交換玻璃珠與銅錢！',
-      historicalLore: '📜 十三行文化掌握高溫煉鐵技術，遺址出土玻璃珠與唐宋銅錢，開啟臺灣金屬器時代。',
+      gameplayTip: '👉 前往【十三行高溫煉鐵工棚】操控風箱鍛造熟鐵器。',
+      historicalLore: '十三行掌握煉鐵技術並出土外來玻璃珠與銅錢，開啟臺灣金屬器時代。',
       howToGet: '十三行鐵匠開局隨身錦囊 / 鼓風煉鐵小遊戲'
     },
     clue_amis_age_rank: {
@@ -2184,8 +2184,8 @@
       name: '阿美族年齡階級集會律令',
       icon: '🌾',
       rarity: 'SSR 社會組織',
-      gameplayTip: '👉 前往【部落聚會所與巨石祭柱】發動青年年齡階級巡護防衛海防，長老統籌祭儀穀糧！',
-      historicalLore: '📜 阿美族為母系社會與男子年齡階級體系，青年集會所承擔部落防衛與公共勞役。',
+      gameplayTip: '👉 前往【部落聚會所與巨石祭柱】啟動年齡階級青年巡防。',
+      historicalLore: '阿美族男子年齡階級承擔部落防衛與公共勞役，由長老統籌祭儀運作。',
       howToGet: '阿美族部落長老開局隨身錦囊 / 年齡階級操練小遊戲'
     },
 
@@ -2195,8 +2195,8 @@
       name: '大員鹿皮買辦契約書',
       icon: '🦌',
       rarity: 'SSR 商貿特產',
-      gameplayTip: '👉 前往【赤崁市集】收購優質鹿皮，暗中繪製鹿耳門水道圖引鄭軍入臺！',
-      historicalLore: '📜 荷治時期臺灣以鹿皮與砂糖為最大宗出口特產，外銷日本與中國賺取大量利潤。',
+      gameplayTip: '👉 前往【赤崁市集】收購鹿皮、掌握鹿耳門水道。',
+      historicalLore: '荷治時期臺灣以鹿皮與砂糖為外銷主力，出口日本與中國賺取豐厚利潤。',
       howToGet: '何斌開局隨身錦囊 / 鹿皮分選小遊戲'
     },
     clue_voc_tariff: {
@@ -2204,8 +2204,8 @@
       name: '熱蘭遮城港務關稅冊',
       icon: '🏰',
       rarity: 'SSR 殖民法令',
-      gameplayTip: '👉 前往【長官公署】審定各國商船進出關稅，加固熱蘭遮要塞砲台防務！',
-      historicalLore: '📜 荷蘭東印度公司於大員建立轉口貿易據點，徵收嚴格關稅與人頭稅維繫要塞。',
+      gameplayTip: '👉 前往【長官公署】審定關稅，加固要塞防務。',
+      historicalLore: '荷蘭東印度公司於大員建立轉口貿易站，徵收海關稅與人頭稅以維繫要塞。',
       howToGet: '揆一開局隨身錦囊 / 港務審查小遊戲'
     },
     clue_voc_poll_tax: {
@@ -2213,8 +2213,8 @@
       name: '抗荷反苛稅起事血書',
       icon: '⚔️',
       rarity: 'SSR 起義檄文',
-      gameplayTip: '👉 前往【赤崁市集】號召漢人墾民奪取普羅民遮城，抗擊荷蘭人頭重稅！',
-      historicalLore: '📜 1652年郭懷一因不滿荷蘭苛徵人頭稅發動起義，促使荷蘭人增修普羅民遮城防守。',
+      gameplayTip: '👉 前往【赤崁市集】號召墾民抗擊人頭重稅。',
+      historicalLore: '1652年郭懷一因不滿荷蘭人頭苛稅發動起事，促使荷蘭人增修普羅民遮城。',
       howToGet: '郭懷一開局隨身錦囊 / 起事動員小遊戲'
     },
 
@@ -2224,8 +2224,8 @@
       name: '全臺首學孔廟擘劃藍圖',
       icon: '📜',
       rarity: 'SSR 儒學文教',
-      gameplayTip: '👉 前往【全臺首學參軍府】建孔廟設科舉，推廣淋鹵曬鹽法與軍屯自給自足！',
-      historicalLore: '📜 陳永華建臺南孔廟「全臺首學」首開臺灣儒學科舉，並改革淋鹵曬鹽法改善民生。',
+      gameplayTip: '👉 前往【全臺首學參軍府】建孔廟設科舉、推廣曬鹽。',
+      historicalLore: '陳永華建臺南孔廟首開臺灣科舉，並推行淋鹵曬鹽法與軍屯奠定文治。',
       howToGet: '陳永華開局隨身錦囊 / 曬鹽文教小遊戲'
     },
     clue_zheng_eic_treaty: {
@@ -2233,8 +2233,8 @@
       name: '英國東印度公司通商合約',
       icon: '🇬🇧',
       rarity: 'SSR 國際條約',
-      gameplayTip: '👉 前往【英商通商館】批准英商設立商館，採購軍火火藥突破清廷封鎖！',
-      historicalLore: '📜 1670年鄭經與英商簽約通商，採購槍砲火藥並外銷糖糖，為臺灣首部正式外貿合約。',
+      gameplayTip: '👉 前往【英商通商館】批准商館設立，採購火藥軍械。',
+      historicalLore: '1670年鄭經與英商簽約通商採購軍械並外銷白糖，為臺灣首部正式外貿條約。',
       howToGet: '鄭經開局隨身錦囊 / 經略洋務小遊戲'
     },
     clue_shi_memorial_draft: {
@@ -2242,8 +2242,8 @@
       name: '《臺灣棄留疏》親筆奏章',
       icon: '🚢',
       rarity: 'SSR 海防奏章',
-      gameplayTip: '👉 前往【水師提督府】力排眾議上呈《臺灣棄留疏》，促成康熙帝將臺灣設一府三縣納入版圖！',
-      historicalLore: '📜 施琅澎湖戰勝後上呈《臺灣棄留疏》，力言「臺灣乃江浙閩粵之左護」，促成設府置縣。',
+      gameplayTip: '👉 前往【水師提督府】呈奏《臺灣棄留疏》促成設府置縣。',
+      historicalLore: '施琅上呈《臺灣棄留疏》力陳海防關鍵，促使康熙帝將臺灣設一府三縣納入版圖。',
       howToGet: '施琅開局隨身錦囊 / 澎湖海戰沙盤推演'
     },
 
@@ -2253,8 +2253,8 @@
       name: '八堡圳濁水溪石笱水利圖',
       icon: '🌊',
       rarity: 'SSR 水利重寶',
-      gameplayTip: '👉 前往【八堡圳水工所】運用石笱導引濁水溪，開鑿大圳灌溉彰化十三堡萬頃良田！',
-      historicalLore: '📜 施世榜集資開鑿八堡圳，相傳林先生指導「水籠石笱法」成功分流，為清代臺灣最大水利工程。',
+      gameplayTip: '👉 前往【八堡圳水工所】運用石笱導水開鑿大圳。',
+      historicalLore: '施世榜開鑿八堡圳，採林先生「石笱分流法」，灌溉彰化十三堡萬頃良田。',
       howToGet: '施世榜開局隨身錦囊 / 水利石笱疏導小遊戲'
     },
     clue_zhu_yigui_banner: {
@@ -2262,8 +2262,8 @@
       name: '鴨母王中興抗暴義旗',
       icon: '🦆',
       rarity: 'SSR 民變號令',
-      gameplayTip: '👉 前往【臺灣府衙門】率眾攻打府城，抗擊知府王珍貪婪苛徵！',
-      historicalLore: '📜 朱一貴於1721年發動臺灣首個重大民變，促使清廷加強防備並增設彰化縣與淡水廳。',
+      gameplayTip: '👉 前往【臺灣府衙門】率眾起義抗擊官府苛徵。',
+      historicalLore: '朱一貴於1721年發動重大民變，促使清廷加強防務並增設彰化縣與淡水廳。',
       howToGet: '朱一貴開局隨身錦囊 / 義軍集結小遊戲'
     },
     clue_jiao_guild_seal: {
@@ -2271,8 +2271,8 @@
       name: '艋舺三郊金聯成大關防',
       icon: '🏮',
       rarity: 'SSR 郊商行規',
-      gameplayTip: '👉 前往【艋舺三郊公館】訂立對渡米糖配額公約，調解漳泉械鬥護衛商街！',
-      historicalLore: '📜 郊商為清領時期商業同業公會，「一府二鹿三艋舺」展現對渡米糖貿易與市街繁榮。',
+      gameplayTip: '👉 前往【艋舺三郊公館】訂立對渡配額公約護商路。',
+      historicalLore: '郊商為清代同業公會，「一府二鹿三艋舺」見證了對渡米糖貿易的黃金盛況。',
       howToGet: '艋舺三郊大掌櫃開局隨身錦囊 / 兩岸對渡理貨小遊戲'
     },
 
@@ -2282,8 +2282,8 @@
       name: '寶順洋行外銷烏龍茶約簿',
       icon: '🍵',
       rarity: 'SSR 開港茶金',
-      gameplayTip: '👉 前往【寶順洋行】簽訂安溪製茶師契約，精焙 Formosa Oolong 茶直銷紐約大賺銀兩！',
-      historicalLore: '📜 陶德引進安溪茶苗並資助茶農，使臺灣烏龍茶直接外銷歐美，造就大稻埕繁榮並使經濟重心北移。',
+      gameplayTip: '👉 前往【寶順洋行】簽訂製茶契約，精焙烏龍茶外銷。',
+      historicalLore: '陶德引進茶苗並資助茶農，使Formosa Tea直銷歐美，造就大稻埕繁榮並使重心北移。',
       howToGet: '陶德洋商開局隨身錦囊 / 炭火焙籠精焙小遊戲'
     },
     clue_liu_railway_blueprint: {
@@ -2291,8 +2291,8 @@
       name: '基隆新竹鐵道工務圖抄本',
       icon: '🚂',
       rarity: 'SSR 自強新政',
-      gameplayTip: '👉 前往【官署長官廳】頒布蒸汽鐵路興築令，開通獅球嶺隧道，打通臺灣南北現代化命脈！',
-      historicalLore: '📜 劉銘傳自強新政首重交通，興修基隆至新竹鐵路與新式郵政局，使臺灣成為近代化示範省。',
+      gameplayTip: '👉 前往【官署長官廳】頒布鐵路令，開通基隆新竹鐵道。',
+      historicalLore: '劉銘傳推動新政，興建基隆至新竹鐵路與新式郵政，開啟臺灣近代交通建設。',
       howToGet: '劉銘傳巡撫開局隨身錦囊 / 蒸汽軌道拼裝小遊戲'
     },
     clue_shen_coastal_fort: {
@@ -2300,8 +2300,8 @@
       name: '安平億載金城築砲工事冊',
       icon: '🏰',
       rarity: 'SSR 海防要塞',
-      gameplayTip: '👉 前往【億載金城公署】督建西式砲台，奏請廢除渡臺禁令與推動開山撫番！',
-      historicalLore: '📜 牡丹社事件後沈葆楨來臺積極自強：築億載金城砲台、廢除渡臺禁令並闢建後山三路。',
+      gameplayTip: '👉 前往【億載金城公署】督建西式砲台、廢渡臺禁令。',
+      historicalLore: '牡丹社事件後沈葆楨來臺積極自強：築億載金城、廢渡臺禁令並闢建開山道路。',
       howToGet: '沈葆楨開局隨身錦囊 / 砲台築城小遊戲'
     },
 
@@ -2311,8 +2311,8 @@
       name: '蔣渭水《臨床講義》手稿',
       icon: '🩺',
       rarity: 'SSR 啟蒙綱領',
-      gameplayTip: '👉 前往【文協講堂】號召成立臺灣文化協會與《臺灣民報》，以和平合法演講醫治知識營養不良！',
-      historicalLore: '📜 蔣渭水以醫師視角診斷臺灣患「知識營養不良症」，主張以文化啟蒙與讀報社喚醒臺灣人民族自決意識。',
+      gameplayTip: '👉 前往【文協講堂】成立文協與民報，啟蒙民智。',
+      historicalLore: '蔣渭水診斷臺灣患「知識營養不良症」，主張以文化演講與讀報社啟發民族自決。',
       howToGet: '蔣渭水開局隨身錦囊 / 油墨印報讀報社小遊戲'
     },
     clue_wusanto_blueprint: {
@@ -2320,8 +2320,8 @@
       name: '烏山頭大圳三年輪作給水圖',
       icon: '💧',
       rarity: 'SSR 近代水利',
-      gameplayTip: '👉 前往【水利政務署】實施「三年輪作給水法」，按水稻、甘蔗、雜糧分配大圳水源！',
-      historicalLore: '📜 八田與一設計烏山頭水庫與嘉南大圳，独創三年輪作給水法克服缺水看天田，奠定米倉基礎。',
+      gameplayTip: '👉 前往【水利政務署】落實烏山頭三年輪作給水。',
+      historicalLore: '八田與一設計烏山頭水庫與嘉南大圳，創三年輪作法化解缺水問題，奠定米倉地位。',
       howToGet: '八田與一開局隨身錦囊 / 水閘調控輪作小遊戲'
     },
     clue_mona_ancestral_oath: {
@@ -2329,8 +2329,8 @@
       name: '賽德克祖靈彩虹橋盟誓',
       icon: '🦅',
       rarity: 'SSR 原民戰誓',
-      gameplayTip: '👉 前往【抗暴聚落】發動霧社事件抗擊日本理蕃壓迫，捍衛賽德克祖靈尊嚴！',
-      historicalLore: '📜 1930年莫那・魯道率賽德克六社起義發動霧社事件，為日治原住民最後也是最壯烈之抗暴事件。',
+      gameplayTip: '👉 前往【抗暴聚落】發動霧社抗暴捍衛祖靈尊嚴。',
+      historicalLore: '1930年莫那・魯道率六社起義發動霧社事件，為日治原住民最壯烈之抗暴事件。',
       howToGet: '莫那・魯道開局隨身錦囊 / 祖靈盟誓小遊戲'
     },
 
@@ -2340,8 +2340,8 @@
       name: '三七五減租與耕者有其田政令',
       icon: '📜',
       rarity: 'SSR 土地改革',
-      gameplayTip: '👉 前往【省府大樓】頒布三七五減租與耕者有其田，提升佃農自主性並使地主投資工業！',
-      historicalLore: '📜 陳誠推行土地改革三部曲，和平解除封建租約佃農負擔，促成臺灣農業增產與經濟起飛。',
+      gameplayTip: '👉 前往【省府大樓】頒布三七五減租與耕者有其田。',
+      historicalLore: '陳誠推行土地改革三部曲，減輕佃農負擔，促成臺灣農業增產與經濟穩固。',
       howToGet: '陳誠開局隨身錦囊 / 土地合約重簽小遊戲'
     },
     clue_hsinchu_park_charter: {
@@ -2349,8 +2349,8 @@
       name: '新竹科學工業園區籌設專案',
       icon: '💻',
       rarity: 'SSR 高科技轉型',
-      gameplayTip: '👉 前往【竹科研發中心】引進積體電路技術，創辦晶圓半導體聚落，打造科技矽島！',
-      historicalLore: '📜 孫運璿與李國鼎推動成立新竹科學園區與工研院，引進美超微半導體技術，奠定臺灣高科技矽島。',
+      gameplayTip: '👉 前往【竹科研發中心】創立科學園區發展半導體。',
+      historicalLore: '孫運璿與李國鼎推動成立新竹科學園區與工研院，奠定臺灣高科技矽島地位。',
       howToGet: '孫運璿/李國鼎開局隨身錦囊 / 晶圓光罩研發小遊戲'
     },
     clue_constitutional_reform: {
@@ -2358,8 +2358,8 @@
       name: '終止動員戡亂全民直選宣告',
       icon: '🗳️',
       rarity: 'SSR 民主憲政',
-      gameplayTip: '👉 前往【憲政大樓】終止動員戡亂時期，落實國會全面改選與全民總統直選！',
-      historicalLore: '📜 1990年代李登輝順應野百合學運訴求，終止動員戡亂並推動修憲，於1996年完成首次全民直選總統。',
+      gameplayTip: '👉 前往【憲政大樓】終止動員戡亂，落實全民直選。',
+      historicalLore: '1990年代終止動員戡亂並推動國會改選與總統直選，和平完成臺灣民主轉型。',
       howToGet: '李登輝開局隨身錦囊 / 民主投票箱小遊戲'
     }
   };

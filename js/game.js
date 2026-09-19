@@ -2575,8 +2575,8 @@ class GameController {
       ctx.fillText(loc.banner, loc.x + loc.width / 2, plaqueY + plaqueH / 2);
       ctx.shadowBlur = 0;
 
-      // 4. 【當前歷史任務標籤】(取消所有「★ 錦囊首選」劇透，讓玩家憑秘笈思考研讀)
-      if (opt || loc.id === 'loc_dock' || loc.id === 'loc_player_home') {
+      // 4. 【常駐功能地標標籤】依需求：僅有行腳理貨/碼頭與自家私宅顯示常駐提示；歷史任務/決策建築絕不浮現選項標籤，不給任何劇透暗示
+      if (loc.id === 'loc_dock' || loc.id === 'loc_player_home') {
         const floatY = loc.y - 66 + Math.sin(this.ambientLightTick * 3 + loc.doorX) * 3;
         const badgeW = 216;
         const badgeH = 32;
@@ -2584,31 +2584,16 @@ class GameController {
         const workName = (this.currentEra && this.currentEra.workActionName) || '打工理貨';
         const homeName = (this.currentEra && this.currentEra.homeName) || '居所宅邸';
 
-        let badgeBg = 'rgba(30, 41, 59, 0.95)';
-        let badgeBorder = loc.themeColor || '#38bdf8';
-        let badgeText = opt ? (opt.badge || '💡 歷史抉擇') : `🛶 ${workName}`;
-        let badgeTextColor = '#f8fafc';
+        let badgeBg = 'rgba(2, 132, 199, 0.95)';
+        let badgeBorder = '#7dd3fc';
+        let badgeText = `🛶 ${workName} · 探聽情報`;
+        let badgeTextColor = '#ffffff';
 
         if (loc.id === 'loc_player_home') {
           badgeBg = 'rgba(15, 60, 35, 0.96)';
           badgeBorder = '#4ade80';
           badgeText = `🛖 ${homeName} · Lv.${this.state.homeLevel || 1}`;
           badgeTextColor = '#fef08a';
-        } else if (loc.id === 'loc_smuggler') {
-          badgeBg = 'rgba(220, 38, 38, 0.95)';
-          badgeBorder = '#fca5a5';
-          badgeText = this.currentEraId === 'era_01_prehistory' ? '🌊 越洋黑潮 · 換南洋珠' : '⚠️ 官府嚴查 · 走私暴利';
-          badgeTextColor = '#ffffff';
-        } else if (loc.id === 'loc_dock') {
-          badgeBg = 'rgba(2, 132, 199, 0.95)';
-          badgeBorder = '#7dd3fc';
-          badgeText = `🛶 ${workName} · 探聽情報`;
-          badgeTextColor = '#ffffff';
-        } else if (opt) {
-          badgeBg = 'rgba(30, 41, 59, 0.95)';
-          badgeBorder = loc.themeColor || '#38bdf8';
-          badgeText = opt.badge || '💡 歷史抉擇';
-          badgeTextColor = '#f8fafc';
         }
 
         ctx.fillStyle = badgeBg;
@@ -4507,28 +4492,31 @@ class GameController {
       if (bestClue) {
         tipEl.innerText = bestClue.gameplayTip;
       } else {
-        const roleAction = this.state.roleType === 'bureaucrat' ? '制定合宜法規制度以保港稅' : (this.state.roleType === 'pioneer' ? '折衝部族盟約以守衛土地自主' : '做出關鍵商業抉擇以獲取高額貨銀');
-        tipEl.innerHTML = `👉 快去${dirDesc}<strong>【${targetLoc.name}】</strong>，${roleAction}！`;
+        tipEl.innerHTML = `👉 前往${dirDesc}<strong>【${targetLoc.name}】</strong>推進歷史探索。`;
       }
     }
 
     if (loreEl) {
-      if (bestClue) {
-        loreEl.innerText = bestClue.historicalLore;
+      let rawLore = bestClue ? bestClue.historicalLore : (currentNode.historicalContext || '把握歷史關鍵抉擇，引領時代前進！');
+      rawLore = rawLore.replace(/^[📜📖\s]+/, '');
+      loreEl.innerText = rawLore;
+    }
+
+    // 時空穿越秘笈僅在破關後動態呈現，任務進行中隱藏，保持秘笈簡約清爽
+    if (spacetimeBanner) {
+      if (this.isCurrentEraCompleted()) {
+        spacetimeBanner.classList.remove('hidden');
+        if (spacetimeDesc) {
+          spacetimeDesc.innerHTML = '🎉 本時代已通關！請沿大道<strong class="text-yellow-300">【一直往右走 ▶】</strong>踏入時空渡口前往下一時代。';
+        }
       } else {
-        loreEl.innerText = currentNode.historicalContext || '📜 時代浪潮翻湧，把握歷史關鍵體制與商機，引領歷史前進！';
+        spacetimeBanner.classList.add('hidden');
       }
     }
 
-    if (spacetimeBanner) {
-      spacetimeBanner.className = 'p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/90 to-indigo-950/90 border border-purple-400/60 mb-3 flex items-start gap-2.5';
-    }
-    if (spacetimeDesc) {
-      spacetimeDesc.innerHTML = '完成本時代任務破關後，請沿著大道<strong class="text-yellow-300">【一直往右走 ▶】</strong>踏入東方時空渡口即可穿越至下一時代！（往左走亦可回溯時空喔！）';
-    }
-
+    const GUIDE_FEE = 35;
     if (secretNavBtn) {
-      secretNavBtn.innerHTML = `<span>🧭</span><span>僱嚮導帶路 (10${curUnit})</span>`;
+      secretNavBtn.innerHTML = `<span>🧭</span><span>僱嚮導帶路 (${GUIDE_FEE}${curUnit})</span>`;
     }
 
     const modal = document.getElementById('quest-secret-modal');
