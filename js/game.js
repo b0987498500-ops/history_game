@@ -4452,14 +4452,8 @@ class GameController {
       const totalCount = curEraPerspectives.length;
       const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id)).length;
       const curIdx = curEraPerspectives.findIndex(p => p.id === this.state.identityId);
-      let nextP = null;
-      for (let i = 1; i <= totalCount; i++) {
-        const candidate = curEraPerspectives[(curIdx + i) % totalCount];
-        if (!this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(candidate.id)) {
-          nextP = candidate;
-          break;
-        }
-      }
+      // 由左到右、由上而下依序尋找本時代第一位尚未通關的角色
+      let nextP = curEraPerspectives.find(p => !this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(p.id));
       if (!nextP) nextP = curEraPerspectives[(curIdx + 1) % totalCount];
 
       if (badgeEl) badgeEl.innerText = '📜 篇章演繹推進中';
@@ -4583,14 +4577,8 @@ class GameController {
       const totalCount = curEraPerspectives.length;
       const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id)).length;
       const curIdx = curEraPerspectives.findIndex(p => p.id === this.state.identityId);
-      let nextP = null;
-      for (let i = 1; i <= totalCount; i++) {
-        const candidate = curEraPerspectives[(curIdx + i) % totalCount];
-        if (!this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(candidate.id)) {
-          nextP = candidate;
-          break;
-        }
-      }
+      // 由左到右、由上而下依序尋找本時代第一位尚未通關的角色
+      let nextP = curEraPerspectives.find(p => !this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(p.id));
       if (!nextP) nextP = curEraPerspectives[(curIdx + 1) % totalCount];
       this.showToast(`🔀 當前角色演繹已完成！本篇章進度 (${doneCount}/${totalCount})，需全角色通關方可開啟渡口！請接續演繹【${nextP ? nextP.name : ''}】！`, 4500);
       this.showEraSelectModal(this.currentEraId);
@@ -5364,11 +5352,15 @@ class GameController {
     const summaryText = `${perspectiveLoreSummary} 累計完成 ${this.state.choiceHistory.length} 次重大歷史決策，達成 ${Math.round((this.state.historicalDecisionsCount / Math.max(1, this.state.choiceHistory.length)) * 100)}% 史實關鍵節點吻合率！\n👑 本年代演繹進度：【${eraDoneCount} / ${eraPerspectives.length} 位角色】${isEraAllCompleted ? '（已全面破關解鎖下一篇章！）' : `（需將本篇章全部角色皆通關，方可跨入下一歷史時代）`}${transitionLore}`;
     document.getElementById('report-summary').innerText = summaryText;
 
-    // 動態更新「切換本年代下一視角」按鈕
+    // 動態更新「切換本年代下一視角」按鈕 (由左到右優先推薦未通關角色)
     const switchBtn = document.getElementById('btn-switch-perspective');
     if (switchBtn && this.currentEra) {
-      const curIdx = this.currentEra.perspectives.findIndex(p => p.id === this.state.identityId);
-      const nextP = this.currentEra.perspectives[(curIdx + 1) % this.currentEra.perspectives.length];
+      const curEraPerspectives = this.currentEra.perspectives || [];
+      let nextP = curEraPerspectives.find(p => !this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(p.id));
+      if (!nextP) {
+        const curIdx = curEraPerspectives.findIndex(p => p.id === this.state.identityId);
+        nextP = curEraPerspectives[(curIdx + 1) % curEraPerspectives.length];
+      }
       const isNextDone = this.playerMaster && this.playerMaster.completedPerspectives.includes(nextP.id);
       let btnLabel = '';
       if (this.currentEraId === 'era_01_prehistory') {
@@ -5412,16 +5404,10 @@ class GameController {
           reportSpacetimeBtn.onclick = () => { this.closeModal('settlement-modal'); this.autoNavigateToCurrentQuest(); };
         }
       } else {
-        const curIdx = this.currentEra.perspectives.findIndex(p => p.id === this.state.identityId);
-        let nextUncompletedP = null;
-        for (let i = 1; i <= eraPerspectives.length; i++) {
-          const cand = eraPerspectives[(curIdx + i) % eraPerspectives.length];
-          if (!this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(cand.id)) {
-            nextUncompletedP = cand;
-            break;
-          }
-        }
-        if (!nextUncompletedP) nextUncompletedP = eraPerspectives[(curIdx + 1) % eraPerspectives.length];
+        const curEraPerspectives = this.currentEra ? (this.currentEra.perspectives || []) : [];
+        // 由左到右、由上而下依序尋找本時代第一位尚未通關的角色
+        let nextUncompletedP = curEraPerspectives.find(p => !this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(p.id));
+        if (!nextUncompletedP) nextUncompletedP = curEraPerspectives[0];
 
         reportSpacetimeBanner.className = 'p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/90 to-slate-900/90 border border-purple-400/50 mb-5 flex items-center justify-between gap-3 text-left';
         if (reportSpacetimeTitle) reportSpacetimeTitle.innerText = `⏳ 篇章進行中：已通關 (${eraDoneCount}/${eraPerspectives.length}) 位角色`;
@@ -5534,15 +5520,8 @@ class GameController {
       const curEraPerspectives = this.currentEra ? (this.currentEra.perspectives || []) : [];
       const totalCount = curEraPerspectives.length;
       const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id)).length;
-      const curIdx = curEraPerspectives.findIndex(p => p.id === this.state.identityId);
-      let nextP = null;
-      for (let i = 1; i <= totalCount; i++) {
-        const candidate = curEraPerspectives[(curIdx + i) % totalCount];
-        if (!this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(candidate.id)) {
-          nextP = candidate;
-          break;
-        }
-      }
+      // 由左到右、由上而下依序尋找本時代第一位尚未通關的角色
+      let nextP = curEraPerspectives.find(p => !this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(p.id));
       if (!nextP) nextP = curEraPerspectives[(curIdx + 1) % totalCount];
 
       if (navBtnText) navBtnText.innerText = `接續 (${nextP ? nextP.name : '下個人物'})`;
@@ -6202,12 +6181,20 @@ class GameController {
     return false;
   }
 
-  // 判斷特定時代中的特定人物視角是否已解鎖 (依序演繹解鎖，嚴格保留已遊玩角色不退回第1關)
+  // 判斷特定時代中的特定人物視角是否已解鎖 (依「由左到右、由上而下」順序線性演繹解鎖)
   isPerspectiveUnlocked(era, pIndex) {
     if (!era || !era.perspectives || pIndex < 0 || pIndex >= era.perspectives.length) return false;
+    // 1. 每時代第 1 位角色（左上角第一位）預設開放
     if (pIndex === 0) return true;
+
     const targetP = era.perspectives[pIndex];
-    // 若存檔或本尊檔案記錄當前活躍即為該角色，無條件保留，絕不打回第1關！
+
+    // 2. 本身已通關過
+    if (this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(targetP.id)) {
+      return true;
+    }
+
+    // 3. 本尊檔案或當前活躍記錄即為該角色
     if (this.playerMaster && this.playerMaster.lastActivePerspectiveId === targetP.id) {
       return true;
     }
@@ -6218,10 +6205,21 @@ class GameController {
         if (s && s.identityId === targetP.id) return true;
       }
     } catch (e) {}
+
+    // 4. 由左到右、由上而下線性推進：前一位角色已通關，本角色即解鎖
     const prevP = era.perspectives[pIndex - 1];
     const prevDone = prevP && this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(prevP.id);
-    const selfDone = this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(targetP.id);
-    return !!(prevDone || selfDone);
+    if (prevDone) return true;
+
+    // 5. 容錯補正：若後續角色（右側或下方）已經通關過或為當前演繹中角色，前面的前置角色絕對不能上鎖
+    const laterUnlocked = era.perspectives.slice(pIndex + 1).some(p => {
+      const isDone = this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id);
+      const isActive = this.state && this.state.eraId === era.id && this.state.identityId === p.id;
+      return isDone || isActive;
+    });
+    if (laterUnlocked) return true;
+
+    return false;
   }
 
   showLockedEraToast(eraId) {
@@ -6459,10 +6457,16 @@ class GameController {
   switchPerspectiveInSameEra() {
     this.closeModal('settlement-modal');
     if (!this.currentEra) return;
-    const curIdx = this.currentEra.perspectives.findIndex(p => p.id === this.state.identityId);
-    const nextIdx = (curIdx + 1) % this.currentEra.perspectives.length;
-    const nextP = this.currentEra.perspectives[nextIdx];
-    this.selectPerspectiveAndStartGame(this.currentEra.id, nextP.id);
+    const curEraPerspectives = this.currentEra.perspectives || [];
+    // 依序尋找本時代「由左到右、由上而下」第一位尚未通關的角色
+    let nextP = curEraPerspectives.find(p => !this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(p.id));
+    if (!nextP) {
+      const curIdx = curEraPerspectives.findIndex(p => p.id === this.state.identityId);
+      nextP = curEraPerspectives[(curIdx + 1) % curEraPerspectives.length];
+    }
+    if (nextP) {
+      this.selectPerspectiveAndStartGame(this.currentEra.id, nextP.id);
+    }
   }
 
   proceedToNextEra() {
