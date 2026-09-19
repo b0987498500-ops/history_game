@@ -2258,83 +2258,112 @@ const COLLECTIBLE_DATABASE = {
   relic_starter_bamboo_basket: {
     id: 'relic_starter_bamboo_basket',
     name: '傳承深坑採茶簍',
-    rarity: '新手傳家寶 ★★★',
+    rarity: '傳家寶 ★★★',
     icon: '🧺',
+    price: 0,
     buff: '初始行商銀兩額外 +30 兩',
     lore: '青年林晨恩出門闖蕩時隨身背負的手編竹茶簍，承載著家族世代茶農的汗水與致富夢想。',
     howToGet: '大稻埕開局新手隨身珍藏'
   },
-  relic_tea_seal: {
-    id: 'relic_tea_seal',
-    name: '寶順洋行通商印記',
-    rarity: '珍品文物 ★★★★',
-    icon: '💮',
-    buff: '茶葉貿易暴擊利潤 +15%',
-    lore: '蓋有英國寶順洋行雙語鋼印的通商憑信，是臺灣烏龍茶直銷歐美的通行憑證。',
-    howToGet: '達成寶順洋行首期茶葉合約'
-  },
-  relic_formosa_tea_box: {
-    id: 'relic_formosa_tea_box',
-    name: '首批外銷烏龍茶箱',
-    rarity: '珍品文物 ★★★★',
-    icon: '📦',
-    buff: '暴擊機率永久 +10%',
-    lore: '印著「Formosa Oolong Tea」金龍標籤的外銷茶箱，是臺灣烏龍茶風靡歐美的歷史起點！',
-    howToGet: '完成直銷紐約大單交易'
-  },
-  relic_guild_silver_scale: {
-    id: 'relic_guild_silver_scale',
-    name: '三邑郊商等子天平',
-    rarity: '珍品文物 ★★★★',
-    icon: '⚖️',
-    buff: '所有商號交易底價 -10%',
-    lore: '福建郊商專用的烏木黃銅戥子天平，分釐不差，見證了漢商在河港老街的百年商譽基石。',
-    howToGet: '於同鄉會館促成閩商聯保結盟'
-  },
-  relic_customs_stamp: {
-    id: 'relic_customs_stamp',
-    name: '淡水稅關驗訖火漆防印',
-    rarity: '珍品文物 ★★★★',
-    icon: '🏛️',
-    buff: '海關與洋行聲望成長 +25%',
-    lore: '淡水海關副通判加蓋的正印，象徵合規通商的免扣押豁免特權。',
-    howToGet: '平息海關稅務爭端並合法完稅'
-  },
-  relic_dodd_watch: {
-    id: 'relic_dodd_watch',
-    name: '陶德的純銀懷錶',
-    rarity: '傳奇文物 ★★★★★',
-    icon: '⏱️',
-    buff: '全交易收益額外 +15%',
-    lore: '英國洋行老闆約翰·陶德親手贈予的瑞士純銀懷錶，鐫刻「時間就是財富」！',
-    howToGet: '促成大稻埕茶金聯盟或達成先鋒任務'
+  relic_prehistoric_jade: {
+    id: 'relic_prehistoric_jade',
+    name: '卑南雙獸耳人獸形玉玦',
+    rarity: '國寶文物 ★★★★★',
+    icon: '📿',
+    price: 60,
+    buff: '永久博學值 +20，自力探索獎勵額外 +5 兩',
+    lore: '花蓮豐田閃玉磨製的南島頂級工藝信物，象徵史前臺灣環南海島嶼貿易的繁榮樞紐！',
+    howToGet: '珍寶閣花費 60 兩銀子典藏'
   },
   relic_voc_silver_coin: {
     id: 'relic_voc_silver_coin',
     name: '荷蘭東印度公司銀杜卡特',
     rarity: '傳奇文物 ★★★★★',
     icon: '🪙',
-    buff: '全商貿利潤 +20%',
+    price: 90,
+    buff: '全時空商貿利潤永久 +15%',
     lore: '刻有VOC徽記的重磅銀幣，曾是大航海時代遠東與臺灣原住民貿易的國際硬通貨！',
-    howToGet: '1642 年時代大員商貿大單'
+    howToGet: '珍寶閣花費 90 兩銀子典藏'
+  },
+  relic_tea_seal: {
+    id: 'relic_tea_seal',
+    name: '寶順洋行通商印記',
+    rarity: '珍品文物 ★★★★',
+    icon: '💮',
+    price: 80,
+    buff: '茶葉貿易暴擊利潤 +15%',
+    lore: '蓋有英國寶順洋行雙語鋼印的通商憑信，是臺灣烏龍茶直銷歐美的通行憑證。',
+    howToGet: '達成寶順洋行首期茶葉合約或珍寶閣典藏'
+  },
+  relic_formosa_tea_box: {
+    id: 'relic_formosa_tea_box',
+    name: '首批外銷烏龍茶箱',
+    rarity: '珍品文物 ★★★★',
+    icon: '📦',
+    price: 110,
+    buff: '暴擊機率永久 +10%',
+    lore: '印著「Formosa Oolong Tea」金龍標籤的外銷茶箱，是臺灣烏龍茶風靡歐美的歷史起點！',
+    howToGet: '完成直銷紐約大單交易或珍寶閣典藏'
+  },
+  relic_guild_silver_scale: {
+    id: 'relic_guild_silver_scale',
+    name: '三邑郊商等子天平',
+    rarity: '珍品文物 ★★★★',
+    icon: '⚖️',
+    price: 130,
+    buff: '所有商號交易底價 -10%',
+    lore: '福建郊商專用的烏木黃銅戥子天平，分釐不差，見證了漢商在河港老街的百年商譽基石。',
+    howToGet: '促成閩商聯保結盟或珍寶閣典藏'
+  },
+  relic_customs_stamp: {
+    id: 'relic_customs_stamp',
+    name: '淡水稅關驗訖火漆防印',
+    rarity: '珍品文物 ★★★★',
+    icon: '🏛️',
+    price: 150,
+    buff: '海關與洋行聲望成長 +25%',
+    lore: '淡水海關副通判加蓋的正印，象徵合規通商的免扣押豁免特權。',
+    howToGet: '平息海關稅務爭端或珍寶閣典藏'
+  },
+  relic_dodd_watch: {
+    id: 'relic_dodd_watch',
+    name: '陶德的純銀懷錶',
+    rarity: '傳奇文物 ★★★★★',
+    icon: '⏱️',
+    price: 180,
+    buff: '全交易收益額外 +15%',
+    lore: '英國洋行老闆約翰·陶德親手贈予的瑞士純銀懷錶，鐫刻「時間就是財富」！',
+    howToGet: '促成大稻埕茶金聯盟或珍寶閣典藏'
   },
   relic_silk_measure_rule: {
     id: 'relic_silk_measure_rule',
     name: '永樂町精染黃銅布尺',
     rarity: '珍品文物 ★★★★',
     icon: '📏',
+    price: 140,
     buff: '實業交易利潤 +15%',
     lore: '大稻埕永樂座布莊掌櫃隨身佩戴的精準銅尺，代表臺灣近代織品工業的萌芽盛景。',
-    howToGet: '1920 年代永樂布莊實業拓展'
+    howToGet: '1920年代永樂布莊實業拓展或珍寶閣典藏'
   },
   relic_taiwan_minpao: {
     id: 'relic_taiwan_minpao',
     name: '創刊號《臺灣民報》',
     rarity: '傳奇文物 ★★★★★',
     icon: '📰',
+    price: 200,
     buff: '民眾聲望成長 +30%',
     lore: '被譽為「臺灣人唯一的言論機關」，點燃了全島知識分子爭取自治的啟蒙烈火！',
-    howToGet: '1920 年代民主自決請願運動'
+    howToGet: '1920年代民主自決請願運動或珍寶閣典藏'
+  },
+  relic_modern_chip_wafer: {
+    id: 'relic_modern_chip_wafer',
+    name: '工研院初號矽晶圓光罩盤',
+    rarity: '傳奇文物 ★★★★★',
+    icon: '💿',
+    price: 250,
+    buff: '全時空歷史行商聲望 +50，自力尋路獎勵 +10 兩',
+    lore: '1970年代引進國際積體電路技術後試製的先導矽晶圓，奠定臺灣高科技矽盾奇蹟的歷史基石！',
+    howToGet: '珍寶閣花費 250 兩銀子典藏'
   }
 };
 

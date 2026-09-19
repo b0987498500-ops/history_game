@@ -267,29 +267,29 @@
   <!-- 8. 右下角 MOBA 技能輪盤與交涉大按鈕 -->
   <div id="action-wheel">
     <!-- 技能 1: 疾跑 / 衝刺 (Sprint) -->
-    <button id="skill-sprint" onclick="game.castSkill('sprint')" class="skill-btn group" title="疾跑衝刺：瞬間加速2.5秒奔跑 (J鍵)">
+    <button id="skill-sprint" onclick="game.castSkill('sprint')" class="skill-btn group" title="疾跑衝刺：花費 2 兩銀子加速奔馳 2.5 秒 (Z/J 鍵)">
       <span class="skill-icon group-hover:scale-110 transition-transform">⚡</span>
-      <span class="skill-label">疾跑 <b class="text-xs text-amber-300 font-mono">[J]</b></span>
+      <span class="skill-label">疾跑 <b class="text-xs text-amber-300 font-mono">[Z]</b></span>
       <div id="cd-sprint" class="skill-cooldown-overlay">3s</div>
     </button>
 
-    <!-- 技能 2: 行商秘笈 / 導引雷達 (Radar) -->
-    <button id="skill-radar" onclick="game.castSkill('radar')" class="skill-btn group" title="探查秘笈最優路徑 (K / 快捷鍵)">
+    <!-- 技能 2: 行商秘笈 / 探查環境 (Inspect) -->
+    <button id="skill-radar" onclick="game.castSkill('radar')" class="skill-btn group" title="探查環境線索與翻閱隨身秘笈 (X/K 鍵)">
       <span class="skill-icon group-hover:scale-110 transition-transform">📜</span>
-      <span class="skill-label">探查 <b class="text-xs text-amber-300 font-mono">[K]</b></span>
+      <span class="skill-label">探查 <b class="text-xs text-amber-300 font-mono">[X]</b></span>
       <div id="cd-radar" class="skill-cooldown-overlay">5s</div>
     </button>
 
-    <!-- 技能 3: 碼頭/部落理貨打工 (Work) -->
-    <button id="skill-dock" onclick="game.startDockMinigame()" class="skill-btn group" title="打工理貨 (L / 快捷鍵)">
+    <!-- 技能 3: 碼頭/部落理貨工藝 (Work) -->
+    <button id="skill-dock" onclick="game.startDockMinigame()" class="skill-btn group" title="打工理貨 (C/L 鍵)">
       <span id="skill-dock-icon" class="skill-icon group-hover:scale-110 transition-transform">🛶</span>
-      <span id="skill-dock-label" class="skill-label">工藝 <b class="text-xs text-amber-300 font-mono">[L]</b></span>
+      <span id="skill-dock-label" class="skill-label">工藝 <b class="text-xs text-amber-300 font-mono">[C]</b></span>
     </button>
 
     <!-- 召喚師技能: 回家/回城 (Recall) -->
-    <button id="skill-recall" onclick="game.castSkill('recall')" class="skill-btn group border-emerald-400/90 text-emerald-200 shadow-[0_0_20px_rgba(34,197,94,0.4)]" title="回宅邸 (B / 快捷鍵)">
+    <button id="skill-recall" onclick="game.castSkill('recall')" class="skill-btn group border-emerald-400/90 text-emerald-200 shadow-[0_0_20px_rgba(34,197,94,0.4)]" title="回宅邸 (V/B 鍵)">
       <span class="text-lg">🏡</span>
-      <span class="skill-label">回家 <b class="text-[9px] text-emerald-300 font-mono">[B]</b></span>
+      <span class="skill-label">回家 <b class="text-[9px] text-emerald-300 font-mono">[V]</b></span>
     </button>
 
     <!-- 巨型交涉 / 普攻主按鍵 (Attack / Negotiate) -->
@@ -303,23 +303,27 @@
   <!-- 9. 底部常駐東方古風操作提示儀表列 (Control Hints Bar) -->
   <div id="control-hints-bar" class="control-hints-bar">
     <div class="hint-chip">
-      <span class="hint-key">W A S D</span> 或 <span class="hint-key">滑鼠點擊</span> 移動
+      <span class="hint-key">W A S D</span> 移動
     </div>
     <span class="text-amber-500/50 font-black">|</span>
     <div class="hint-chip">
-      <span class="hint-key">空白鍵 Space</span> 交涉/決策
+      <span class="hint-key">空白鍵</span> 交涉/決策
     </div>
     <span class="text-amber-500/50 font-black">|</span>
     <div class="hint-chip">
-      <span class="hint-key">J</span> 疾跑
+      <span class="hint-key">Z</span> 疾跑
     </div>
     <span class="text-amber-500/50 font-black">|</span>
     <div class="hint-chip">
-      <span class="hint-key">K</span> 導引雷達
+      <span class="hint-key">X</span> 探查秘笈
     </div>
     <span class="text-amber-500/50 font-black">|</span>
     <div class="hint-chip">
-      <span class="hint-key">L</span> <span id="hint-work-text">工藝打工</span>
+      <span class="hint-key">C</span> <span id="hint-work-text">工藝打工</span>
+    </div>
+    <span class="text-amber-500/50 font-black">|</span>
+    <div class="hint-chip">
+      <span class="hint-key">V</span> 回家
     </div>
   </div>
 
@@ -350,16 +354,20 @@
       </div>
 
       <!-- 分頁切換鈕 -->
-      <div class="flex items-center gap-2 pt-4 pb-3 shrink-0">
-        <button id="tab-btn-upgrade" onclick="game.switchHomeTab('upgrade')" class="home-tab-btn active flex items-center gap-1.5">
+      <div class="flex items-center gap-2 pt-4 pb-3 shrink-0 overflow-x-auto">
+        <button id="tab-btn-upgrade" onclick="game.switchHomeTab('upgrade')" class="home-tab-btn active flex items-center gap-1.5 whitespace-nowrap">
           <span>🔨</span>
           <span>宅邸擴建升級</span>
         </button>
-        <button id="tab-btn-wardrobe" onclick="game.switchHomeTab('wardrobe')" class="home-tab-btn flex items-center gap-1.5">
+        <button id="tab-btn-relics" onclick="game.switchHomeTab('relics')" class="home-tab-btn flex items-center gap-1.5 whitespace-nowrap">
+          <span>🏆</span>
+          <span>歷史珍寶賞坊</span>
+        </button>
+        <button id="tab-btn-wardrobe" onclick="game.switchHomeTab('wardrobe')" class="home-tab-btn flex items-center gap-1.5 whitespace-nowrap">
           <span>👘</span>
           <span>衣裳閣換裝</span>
         </button>
-        <button id="tab-btn-rent" onclick="game.switchHomeTab('rent')" class="home-tab-btn flex items-center gap-1.5">
+        <button id="tab-btn-rent" onclick="game.switchHomeTab('rent')" class="home-tab-btn flex items-center gap-1.5 whitespace-nowrap">
           <span>💰</span>
           <span>商號店租分紅</span>
         </button>
@@ -443,6 +451,23 @@
             </div>
           </div>
         </div>
+
+        <!-- 分頁 4: 歷史珍寶賞坊 (花銀兩典藏跨時代聖物) -->
+        <div id="home-tab-content-relics" class="hidden space-y-4">
+          <div class="p-4 rounded-2xl bg-slate-900/90 border border-amber-500/40 flex items-center justify-between gap-2">
+            <div>
+              <span class="text-xs font-black text-amber-400 uppercase tracking-wider block">🏛️ 承恩家族 · 歷史珍寶閣</span>
+              <p class="text-xs sm:text-sm text-slate-200 mt-0.5 font-bold">累積經營賺取的銀兩，珍藏臺灣歷代國寶與傳奇聖物，獲得全時空永久特權加成！</p>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="text-xs text-slate-400 block font-bold">隨身現銀</span>
+              <span id="relics-shop-current-silver" class="text-lg sm:text-xl font-black text-amber-300 font-mono">0 兩</span>
+            </div>
+          </div>
+          <div id="home-relics-shop-list" class="space-y-3">
+            <!-- 動態注入珍寶商品列表 -->
+          </div>
+        </div>
       </div>
 
       <div class="pt-3 border-t border-white/10 flex items-center justify-between text-sm text-slate-300 shrink-0">
@@ -487,7 +512,7 @@
             <span>右下角的「疾跑」是什麼功能？</span>
           </h4>
           <p class="text-base sm:text-lg text-sky-100 font-medium leading-relaxed">
-            <strong>就是「衝刺加速跑」！</strong> 大稻埕地圖很大，點擊【疾跑】（或鍵盤按 <strong>J 鍵</strong>），角色會像一陣風一樣加速狂奔 2.5 秒，讓你快速穿梭在洋行、碼頭與家宅之間，省去慢慢走路的時間！
+            <strong>就是「衝刺加速跑」！</strong> 大地圖遼闊，點擊【疾跑】（鍵盤按 <strong>Z 鍵</strong> 或 J 鍵），花費 <strong>2 兩銀子</strong> 購買提神涼茶，角色即可瞬間加速狂奔 2.5 秒，快速穿梭在商行、碼頭與家宅之間！
           </p>
         </div>
 
@@ -498,10 +523,10 @@
             <span>不知道該幹嘛時？只要照這四步走：</span>
           </h4>
           <ol class="space-y-3 text-base sm:text-lg text-slate-100 list-decimal list-inside font-medium leading-relaxed">
-            <li><strong>看螢幕上方任務條</strong>：告訴你該去哪，點【🧭 尋路】角色會自己走過去！</li>
-            <li><strong>缺錢去碼頭打工</strong>：走到碼頭或按【⚓ 打工(L)】，點 3 箱貨現賺銀子，還能拿到行商秘笈！</li>
-            <li><strong>走進商號發大財</strong>：走到商號門口光圈按【空白鍵】，選對茶葉商路能觸發「200% 紅利暴擊」金幣噴發！</li>
-            <li><strong>賺了銀子回家蓋豪宅</strong>：按【🏡 回家(B)】，花銀兩擴建房子、換新衣服、領取源源不絕的店租！</li>
+            <li><strong>查閱上方【📜 秘笈】</strong>：閱讀歷史背景與地貌線索，親自走向對應建築；憑藉自身智慧自力探訪抵達，可額外獲贈 <strong>15 兩銀子 + 10 點博學值</strong>！</li>
+            <li><strong>缺錢去碼頭打工</strong>：走到碼頭或按【🛶 工藝(C)】，完成分選現賺銀子！</li>
+            <li><strong>走進商號發大財</strong>：走到商號門口光圈按【空白鍵】，選對歷史商路能觸發「200% 紅利暴擊」金幣噴發！</li>
+            <li><strong>賺了銀子回家珍藏國寶</strong>：按【🏡 回家(V)】，花銀兩擴建豪宅、換新衣服，並在【🏆 歷史珍寶閣】珍藏跨時代國寶文物！</li>
           </ol>
         </div>
       </div>

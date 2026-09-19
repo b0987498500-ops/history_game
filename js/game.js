@@ -816,13 +816,16 @@ class GameController {
     if (this.activeRadarBeam > 0) {
       this.activeRadarBeam -= 1 / 60;
     }
+    if (this.radarPulseTimer > 0) {
+      this.radarPulseTimer -= 1 / 60;
+    }
 
-    // 家宅商號店租分紅累積 (每 25 秒產出一次，歸屬本尊林晨恩永久基業)
+    // 家宅商號店租分紅累積 (調整為每 90 秒產出一次，健康平衡經濟)
     const currentHomeLevel = (this.playerMaster && this.playerMaster.homeLevel) || (this.state && this.state.homeLevel) || 1;
     if (this.state && currentHomeLevel > 1) {
       this.state.rentTimer = (this.state.rentTimer || 0) + 1 / 60;
       if (this.playerMaster) this.playerMaster.rentTimer = this.state.rentTimer;
-      if (this.state.rentTimer >= 25) {
+      if (this.state.rentTimer >= 90) {
         this.state.rentTimer = 0;
         if (this.playerMaster) this.playerMaster.rentTimer = 0;
         const currentTier = this.models.HOME_TIERS[currentHomeLevel - 1];
@@ -2488,21 +2491,19 @@ class GameController {
     for (const loc of this.models.MAP_LOCATIONS) {
       const opt = currentNode ? currentNode.options.find(o => o.targetLocationId === loc.id) : null;
       const isTarget = !!opt || loc.id === 'loc_dock';
-      const reqClues = opt ? (opt.requiredClues || (opt.requiredClueId ? [opt.requiredClueId] : [])) : [];
-      const isRecommended = reqClues.length > 0 && reqClues.every(cid => this.state.unlockedClues.includes(cid));
 
       ctx.save();
 
-      // 1. 地面發光法陣 (Ground Interactivity Circle)
-      const ringColor = isRecommended ? '#f59e0b' : (opt ? loc.themeColor : '#64748b');
+      // 1. 地面發光法陣 (Ground Interactivity Circle) - 保持正常地標色彩，絕不劇透首選
+      const ringColor = opt ? (loc.themeColor || '#38bdf8') : (loc.id === 'loc_dock' ? '#0284c7' : '#64748b');
       const pulse = Math.sin(this.ambientLightTick * 2.5) * 3;
 
       ctx.beginPath();
       ctx.arc(loc.doorX, loc.doorY, 40 + pulse, 0, Math.PI * 2);
-      ctx.fillStyle = isRecommended ? 'rgba(245, 158, 11, 0.2)' : 'rgba(56, 189, 248, 0.1)';
+      ctx.fillStyle = opt ? 'rgba(56, 189, 248, 0.12)' : 'rgba(100, 116, 139, 0.08)';
       ctx.fill();
       ctx.strokeStyle = ringColor;
-      ctx.lineWidth = isRecommended ? 3 : 2;
+      ctx.lineWidth = opt ? 2.5 : 1.5;
       ctx.stroke();
 
       // 內圈八卦/商行刻度
@@ -2574,7 +2575,7 @@ class GameController {
       ctx.fillText(loc.banner, loc.x + loc.width / 2, plaqueY + plaqueH / 2);
       ctx.shadowBlur = 0;
 
-      // 4. 【當前歷史任務標籤】(高架於建築上空，縱向空間獨立，絕不與門額重疊！)
+      // 4. 【當前歷史任務標籤】(取消所有「★ 錦囊首選」劇透，讓玩家憑秘笈思考研讀)
       if (opt || loc.id === 'loc_dock' || loc.id === 'loc_player_home') {
         const floatY = loc.y - 66 + Math.sin(this.ambientLightTick * 3 + loc.doorX) * 3;
         const badgeW = 216;
@@ -2584,7 +2585,7 @@ class GameController {
         const homeName = (this.currentEra && this.currentEra.homeName) || '居所宅邸';
 
         let badgeBg = 'rgba(30, 41, 59, 0.95)';
-        let badgeBorder = '#38bdf8';
+        let badgeBorder = loc.themeColor || '#38bdf8';
         let badgeText = opt ? (opt.badge || '💡 歷史抉擇') : `🛶 ${workName}`;
         let badgeTextColor = '#f8fafc';
 
@@ -2593,17 +2594,6 @@ class GameController {
           badgeBorder = '#4ade80';
           badgeText = `🛖 ${homeName} · Lv.${this.state.homeLevel || 1}`;
           badgeTextColor = '#fef08a';
-        } else if (isRecommended) {
-          badgeBg = 'rgba(245, 158, 11, 0.98)';
-          badgeBorder = '#fef08a';
-          if (this.state.roleType === 'bureaucrat') {
-            badgeText = '★ 錦囊首選 · 審定制度';
-          } else if (this.state.roleType === 'pioneer') {
-            badgeText = '★ 錦囊首選 · 議決盟約';
-          } else {
-            badgeText = '★ 秘笈首選 · 暴擊利潤';
-          }
-          badgeTextColor = '#000000';
         } else if (loc.id === 'loc_smuggler') {
           badgeBg = 'rgba(220, 38, 38, 0.95)';
           badgeBorder = '#fca5a5';
@@ -2614,6 +2604,11 @@ class GameController {
           badgeBorder = '#7dd3fc';
           badgeText = `🛶 ${workName} · 探聽情報`;
           badgeTextColor = '#ffffff';
+        } else if (opt) {
+          badgeBg = 'rgba(30, 41, 59, 0.95)';
+          badgeBorder = loc.themeColor || '#38bdf8';
+          badgeText = opt.badge || '💡 歷史抉擇';
+          badgeTextColor = '#f8fafc';
         }
 
         ctx.fillStyle = badgeBg;
@@ -3695,47 +3690,26 @@ class GameController {
     }
   }
 
-  // 5. 繪製導引雷達金色路徑 (Golden Guide Beam)
+  // 5. 繪製導引雷達環境音波 (Sonar Pulse - 取消直接指向目標門口的激光箭頭)
   drawRadarPath(ctx) {
-    if (this.activeRadarBeam <= 0) return;
+    if (!this.radarPulseTimer || this.radarPulseTimer <= 0) return;
 
-    const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
-    if (!currentNode) return;
-
-    let targetLoc = null;
-    const recOpt = currentNode.options.find(o => o.isHistorical);
-    if (recOpt) {
-      targetLoc = this.models.MAP_LOCATIONS.find(l => l.id === recOpt.targetLocationId);
-    }
-    if (!targetLoc) return;
+    const progress = 1 - (this.radarPulseTimer / 1.5);
+    const radius = 25 + progress * 160;
+    const alpha = (1 - progress) * 0.75;
 
     ctx.save();
-    const grad = ctx.createLinearGradient(this.hero.x, this.hero.y, targetLoc.doorX, targetLoc.doorY);
-    grad.addColorStop(0, 'rgba(56, 189, 248, 0.8)');
-    grad.addColorStop(0.5, 'rgba(245, 158, 11, 0.9)');
-    grad.addColorStop(1, 'rgba(234, 179, 8, 1.0)');
-
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = 5;
-    ctx.setLineDash([12, 10]);
-    ctx.lineDashOffset = -this.ambientLightTick * 20;
-
     ctx.beginPath();
-    ctx.moveTo(this.hero.x, this.hero.y);
-    ctx.lineTo(targetLoc.doorX, targetLoc.doorY);
+    ctx.arc(this.hero.x, this.hero.y, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
+    ctx.lineWidth = 3;
     ctx.stroke();
 
-    // 箭頭
-    const angle = Math.atan2(targetLoc.doorY - this.hero.y, targetLoc.doorX - this.hero.x);
-    ctx.translate(targetLoc.doorX, targetLoc.doorY);
-    ctx.rotate(angle);
-    ctx.fillStyle = '#facc15';
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-20, -10);
-    ctx.lineTo(-20, 10);
-    ctx.closePath();
-    ctx.fill();
+    ctx.arc(this.hero.x, this.hero.y, radius * 0.65, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(251, 191, 36, ${alpha * 0.7})`;
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -4364,17 +4338,17 @@ class GameController {
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
 
-      // 快捷鍵映射
+      // 快捷鍵映射 (支援鄰近按鍵 Z X C V 與 原按鍵 J K L B)
       if (e.code === 'Space' || e.code === 'Enter') {
         e.preventDefault();
         this.handlePrimaryAction();
-      } else if (e.code === 'KeyJ') {
+      } else if (e.code === 'KeyZ' || e.code === 'KeyJ') {
         this.castSkill('sprint');
-      } else if (e.code === 'KeyK') {
+      } else if (e.code === 'KeyX' || e.code === 'KeyK') {
         this.castSkill('radar');
-      } else if (e.code === 'KeyL') {
+      } else if (e.code === 'KeyC' || e.code === 'KeyL') {
         this.startDockMinigame();
-      } else if (e.code === 'KeyB') {
+      } else if (e.code === 'KeyV' || e.code === 'KeyB') {
         this.castSkill('recall');
       } else if (e.code === 'Escape') {
         this.closeAllModals();
@@ -4585,15 +4559,18 @@ class GameController {
     const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
     const curName = (this.currentEra && this.currentEra.currencyName) || '銀兩';
     const guideName = this.currentEraId === 'era_01_prehistory' ? '部落嚮導' : '挑夫嚮導';
-    const GUIDE_FEE = 10;
+    const GUIDE_FEE = 35;
 
     if (this.state.silver < GUIDE_FEE) {
       if (window.soundFx) window.soundFx.playCritical();
-      this.addFloatingText(this.hero.x, this.hero.y - 45, `${curName}不足 10 ${curUnit}！`, '#f87171', 18);
-      this.showToast(`⚠️ ${curName}不足（尋路需 ${GUIDE_FEE} ${curUnit}）！${guideName}不願帶路，請免費查閱【📜 情報秘笈】親自前往！`, 4000);
+      this.addFloatingText(this.hero.x, this.hero.y - 45, `${curName}不足 ${GUIDE_FEE} ${curUnit}！`, '#f87171', 18);
+      this.showToast(`⚠️ ${curName}不足（尋路需 ${GUIDE_FEE} ${curUnit}）！${guideName}不願帶路，請免費查閱上方【📜 秘笈】自主前往，還可獲贈自力探索獎勵！`, 4500);
       setTimeout(() => this.openQuestSecretModal(), 500);
       return;
     }
+
+    // 標記本節點曾使用過付費尋路，無法獲取自力探索獎勵
+    this.usedNavGuideForCurrentNode = true;
 
     // 扣除費用並飄字通知
     this.state.silver -= GUIDE_FEE;
@@ -4804,16 +4781,30 @@ class GameController {
   castSkill(skillName) {
     if (skillName === 'sprint') {
       if (this.skillCooldowns.sprint > 0) return;
+      const SPRINT_COST = 2;
+      const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+      if (this.state.silver < SPRINT_COST) {
+        if (window.soundFx) window.soundFx.playCritical();
+        this.addFloatingText(this.hero.x, this.hero.y - 35, `⚠️ ${curUnit}不足！`, '#f87171', 16);
+        this.showToast(`⚠️ 銀兩不足 ${SPRINT_COST} ${curUnit}，無法購買提神涼茶進行疾跑！可至碼頭打工賺取！`, 3000);
+        return;
+      }
+      this.state.silver -= SPRINT_COST;
+      this.renderHUD();
       this.skillCooldowns.sprint = 4.0;
       this.hero.sprintTimer = 2.5; // 2.5 秒加速衝刺
       if (window.soundFx) window.soundFx.playCritical();
-      this.addFloatingText(this.hero.x, this.hero.y - 35, '⚡ 疾跑衝刺！', '#38bdf8', 16);
+      this.addFloatingText(this.hero.x, this.hero.y - 35, `⚡ 疾跑衝刺！(-${SPRINT_COST} ${curUnit})`, '#38bdf8', 16);
     } else if (skillName === 'radar') {
       if (this.skillCooldowns.radar > 0) return;
       this.skillCooldowns.radar = 6.0;
-      this.activeRadarBeam = 4.0; // 4 秒金色導引路徑
+      this.radarPulseTimer = 1.5; // 1.5 秒環形探查聲波
       if (window.soundFx) window.soundFx.playLevelUp();
-      this.addFloatingText(this.hero.x, this.hero.y - 35, '📜 秘笈導航開啟！', '#facc15', 16);
+      this.addFloatingText(this.hero.x, this.hero.y - 35, '🔍 翻閱隨身錦囊秘笈...', '#facc15', 16);
+      const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
+      if (currentNode) {
+        this.showToast(`📜 秘笈指引：${currentNode.historicalContext || currentNode.description || '請留意地圖各建築門匾，查閱【📜 秘笈】自主研判前往！'}`, 5000);
+      }
     } else if (skillName === 'recall') {
       // 回城傳送回自家承恩商邸
       if (window.soundFx) window.soundFx.playEnter();
@@ -4894,6 +4885,19 @@ class GameController {
     }
 
     this.state.silver += profit;
+
+    // 自力探訪獎勵機制：若未花銀子僱嚮導尋路、憑智慧研讀秘笈抵達，獲贈額外獎勵！
+    if (!this.usedNavGuideForCurrentNode && option.isHistorical) {
+      const selfBonusSilver = 15;
+      const selfBonusKnow = 10;
+      this.state.silver += selfBonusSilver;
+      this.state.knowledge += selfBonusKnow;
+      this.syncMasterProgress(0, selfBonusKnow);
+      this.addFloatingText(this.hero.x, this.hero.y - 75, `🌟 熟讀秘笈·自力探索 (+${selfBonusSilver}兩, +${selfBonusKnow}博學)！`, '#38bdf8', 20);
+      this.showToast(`🌟 你憑藉自身智慧研讀秘笈抵達目標，獲得自力探索獎勵 ${selfBonusSilver} 兩與 ${selfBonusKnow} 點博學！`, 4500);
+    }
+    this.usedNavGuideForCurrentNode = false;
+
     if (option.effects) {
       if (option.effects.reputationDelta) {
         this.state.reputation += option.effects.reputationDelta;
@@ -5416,14 +5420,14 @@ class GameController {
     const isCompleted = this.isCurrentEraCompleted();
     const navBtnText = document.getElementById('nav-btn-text');
     if (navBtnText) {
-      navBtnText.innerText = isCompleted ? '尋路 (時空渡口)' : `尋路 (10${curUnit})`;
+      navBtnText.innerText = isCompleted ? '尋路 (時空渡口)' : `尋路 (35${curUnit})`;
     }
 
     const hintWorkText = document.getElementById('hint-work-text');
     if (hintWorkText) hintWorkText.innerText = workName;
 
     const skillDockLabel = document.getElementById('skill-dock-label');
-    if (skillDockLabel) skillDockLabel.innerText = `${workName.slice(0, 2)} [L]`;
+    if (skillDockLabel) skillDockLabel.innerText = `${workName.slice(0, 2)} [C]`;
 
     const quickClueBadge = document.getElementById('quick-clue-badge');
     if (quickClueBadge) {
@@ -5678,7 +5682,7 @@ class GameController {
 
   switchHomeTab(tabName) {
     if (window.soundFx) window.soundFx.playClick();
-    const tabs = ['upgrade', 'wardrobe', 'rent'];
+    const tabs = ['upgrade', 'relics', 'wardrobe', 'rent'];
     tabs.forEach(t => {
       const btn = document.getElementById(`tab-btn-${t}`);
       const content = document.getElementById(`home-tab-content-${t}`);
@@ -5754,6 +5758,65 @@ class GameController {
       }
     }
 
+    // 歷史珍寶賞坊列表渲染
+    const silverDisplay = document.getElementById('relics-shop-current-silver');
+    if (silverDisplay) silverDisplay.innerText = `${this.state.silver} 兩`;
+
+    const relicsShopContainer = document.getElementById('home-relics-shop-list');
+    if (relicsShopContainer && this.models.COLLECTIBLE_DATABASE) {
+      const masterRelicsList = (this.playerMaster && this.playerMaster.masterRelics) || this.state.inventoryCollectibles || [];
+      const relicKeys = Object.keys(this.models.COLLECTIBLE_DATABASE);
+
+      relicsShopContainer.innerHTML = relicKeys.map(k => {
+        const relic = this.models.COLLECTIBLE_DATABASE[k];
+        if (!relic) return '';
+        const isOwned = masterRelicsList.includes(relic.id);
+        const price = relic.price !== undefined ? relic.price : 100;
+        const canAfford = this.state.silver >= price;
+
+        let actionBtnHtml = '';
+        if (isOwned) {
+          actionBtnHtml = `
+            <span class="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 font-black text-xs flex items-center gap-1 shrink-0">
+              <span>✅</span><span>已永久珍藏</span>
+            </span>
+          `;
+        } else if (price === 0) {
+          actionBtnHtml = `
+            <span class="px-3 py-1.5 rounded-xl bg-slate-800 text-amber-300 border border-amber-500/30 font-black text-xs flex items-center gap-1 shrink-0">
+              <span>🧺</span><span>開局隨身贈予</span>
+            </span>
+          `;
+        } else {
+          actionBtnHtml = `
+            <button onclick="game.buyRelicFromShop('${relic.id}')" 
+              class="px-3.5 py-1.5 rounded-xl ${canAfford ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 shadow-md cursor-pointer' : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'} font-black text-xs flex items-center gap-1 transition-transform active:scale-95 shrink-0">
+              <span>🪙</span><span>花費 ${price} 兩珍藏</span>
+            </button>
+          `;
+        }
+
+        return `
+          <div class="p-3 sm:p-4 rounded-2xl ${isOwned ? 'bg-slate-900/90 border border-emerald-500/40' : 'bg-slate-900/80 border border-amber-500/30'} flex items-center justify-between gap-3 shadow">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+              <div class="w-12 h-12 rounded-2xl ${isOwned ? 'bg-emerald-950/60 border border-emerald-500/50' : 'bg-slate-800 border border-amber-500/40'} flex items-center justify-center text-3xl shrink-0 shadow">
+                ${relic.icon}
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <h5 class="font-serif font-black text-sm sm:text-base ${isOwned ? 'text-emerald-200' : 'text-amber-100'}">${relic.name}</h5>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded-full ${isOwned ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : 'bg-amber-950 text-amber-300 border border-amber-500/40'} font-bold">${relic.rarity}</span>
+                </div>
+                <p class="text-xs text-emerald-300 font-bold mt-0.5">✨ 特權：${relic.buff}</p>
+                <p class="text-[11px] text-slate-300 mt-0.5 line-clamp-1">${relic.lore}</p>
+              </div>
+            </div>
+            ${actionBtnHtml}
+          </div>
+        `;
+      }).join('');
+    }
+
     // 衣裳閣列表渲染
     const outfitsContainer = document.getElementById('home-outfits-list');
     if (outfitsContainer && this.models.HOME_OUTFITS) {
@@ -5785,6 +5848,48 @@ class GameController {
     // 租金顯示
     const rentDisp = document.getElementById('home-accumulated-rent');
     if (rentDisp) rentDisp.innerText = `${accumulatedRent} 兩`;
+  }
+
+  buyRelicFromShop(relicId) {
+    const relic = this.models.COLLECTIBLE_DATABASE[relicId];
+    if (!relic) return;
+    const masterRelicsList = (this.playerMaster && this.playerMaster.masterRelics) || this.state.inventoryCollectibles || [];
+    if (masterRelicsList.includes(relicId)) {
+      this.showToast(`ℹ️ 家族已永久珍藏【${relic.name}】！`);
+      return;
+    }
+    const price = relic.price !== undefined ? relic.price : 100;
+    const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
+    if (this.state.silver < price) {
+      if (window.soundFx) window.soundFx.playCritical();
+      const shortage = price - this.state.silver;
+      this.showToast(`⚠️ 銀兩不足！珍藏【${relic.name}】需 ${price} ${curUnit}（尚缺 ${shortage} ${curUnit}）。可至碼頭打工或商號經商賺取！`, 4000);
+      return;
+    }
+
+    this.state.silver -= price;
+    if (this.playerMaster) {
+      if (!this.playerMaster.masterRelics.includes(relicId)) {
+        this.playerMaster.masterRelics.push(relicId);
+      }
+      this.playerMaster.totalReputation = (this.playerMaster.totalReputation || 0) + 20;
+      this.playerMaster.totalKnowledge = (this.playerMaster.totalKnowledge || 0) + 15;
+      this.saveMasterProfile();
+    }
+    if (this.state.inventoryCollectibles && !this.state.inventoryCollectibles.includes(relicId)) {
+      this.state.inventoryCollectibles.push(relicId);
+    }
+
+    if (window.soundFx) {
+      if (window.soundFx.playLevelUp) window.soundFx.playLevelUp();
+      else window.soundFx.playCoin();
+    }
+    this.coinVFX.burst(this.hero.x - this.camera.x, this.hero.y - this.camera.y, 45);
+    this.addFloatingText(this.hero.x, this.hero.y - 45, `🏆 典藏國寶：${relic.name}！(-${price}兩)`, '#facc15', 20);
+    this.showToast(`🎉 成功花費 ${price} 兩珍藏歷史國寶【${relic.name}】！永久收錄至家族博古架，獲得全時空特權加成！`, 4500);
+
+    this.renderHUD();
+    this.renderHomeModal();
   }
 
   upgradeHome() {
