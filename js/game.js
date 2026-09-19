@@ -951,10 +951,11 @@ class GameController {
     const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
     const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
     const isEraCompleted = this.isCurrentEraCompleted();
+    const canCrossToNext = hasNextEra && isEraCompleted && !this.hasActiveQuest();
 
     if (hasNextEra) {
-      if (!isEraCompleted) {
-        // 🔒 尚未破關：東方邊界 x >= 1840 形成時空封印壁障！
+      if (!canCrossToNext) {
+        // 🔒 尚未全通關或任務進行中：東方邊界 x >= 1840 形成時空封印壁障！
         if (this.hero.x >= 1840) {
           this.hero.x = 1840;
           this.hero.vx = -2.5;
@@ -967,12 +968,17 @@ class GameController {
               if (window.soundFx.playCritical) window.soundFx.playCritical();
               else window.soundFx.playClick();
             }
-            this.showToast(`🔒 尚未破關！需先做出當前時代【${this.currentEra.title}】的歷史抉擇，方可穿越時空前往下一年代！可查閱上方【📜 秘笈】！`, 4000);
-            this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 請先完成歷史抉擇任務！', '#f43f5e', 22);
+            if (this.hasActiveQuest()) {
+              this.showToast(`🔒 任務進行中！請先完成當前角色【${this.state.identityName}】的歷史抉擇任務，再行穿越時空！`, 4000);
+              this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 請先完成角色歷史抉擇！', '#f43f5e', 22);
+            } else {
+              this.showToast(`🔒 尚未全破！需通關本時代【${this.currentEra.title}】全部歷史人物視角，方可穿越至下一年代！可查閱上方【📜 秘笈】！`, 4000);
+              this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 請先完成全部人物視角！', '#f43f5e', 22);
+            }
           }
         }
       } else {
-        // ✨ 已破關：玩家一直往右走，踏入東方時空渡口 (x >= 1860) 即可跨越至下一個年代！
+        // ✨ 已破關且無進行中任務：玩家一直往右走，踏入東方時空渡口 (x >= 1860) 即可跨越至下一個年代！
         if (this.hero.x >= 1860) {
           this.jumpToNextEraSpacetime(nextEra.id);
         }
@@ -1147,7 +1153,7 @@ class GameController {
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
     const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
     const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
-    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted();
+    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted() && !this.hasActiveQuest();
 
     if (!nearestZone && hasNextEra) {
       const portalX = 1880;
@@ -4265,7 +4271,7 @@ class GameController {
 
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
     const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
-    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted();
+    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted() && !this.hasActiveQuest();
 
     if (hasNextEra) {
       if (!isNextUnlocked) {
@@ -4381,7 +4387,7 @@ class GameController {
 
   setNavTarget(x, y, label = null) {
     let targetX = x;
-    if (!this.isCurrentEraCompleted() && targetX > 1840) {
+    if ((!this.isCurrentEraCompleted() || this.hasActiveQuest()) && targetX > 1840) {
       targetX = 1840;
       this.showToast('🔒 尚未通關歷史任務，東方時空封印壁障無法通行！', 3000);
     }
@@ -4415,8 +4421,8 @@ class GameController {
     const secretNavBtn = document.getElementById('secret-modal-nav-btn');
     const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
 
-    // 若本時代已破關：直接切換為【🌌 時空長河穿越秘笈】
-    if (this.isCurrentEraCompleted()) {
+    // 若本時代已全通關且當前無進行中任務：切換為【🌌 時空長河穿越秘笈】
+    if (this.isCurrentEraCompleted() && !this.hasActiveQuest()) {
       if (badgeEl) badgeEl.innerText = '✨ 時代通關指引';
       if (titleEl) titleEl.innerText = '🌌 紀元星軌大道 · 時空穿越秘笈';
       if (tipEl) {
@@ -4525,8 +4531,8 @@ class GameController {
 
   // 自動尋路功能 (依據時代花費貨幣僱用嚮導引路，破關後免費引路至時空渡口)
   autoNavigateToCurrentQuest() {
-    // 若本時代已通關：直接引路至東方時空渡口！
-    if (this.isCurrentEraCompleted()) {
+    // 若本時代已全通關且當前無進行中任務：直接引路至東方時空渡口！
+    if (this.isCurrentEraCompleted() && !this.hasActiveQuest()) {
       const portalX = 1880;
       const portalY = 420;
       this.setNavTarget(portalX, portalY, '東方時空渡口');
@@ -5405,7 +5411,7 @@ class GameController {
       minimapYear.innerText = this.currentEra.minimapYearBadge;
     }
 
-    const isCompleted = this.isCurrentEraCompleted();
+    const isCompleted = this.isCurrentEraCompleted() && !this.hasActiveQuest();
     const navBtnText = document.getElementById('nav-btn-text');
     if (navBtnText) {
       navBtnText.innerText = isCompleted ? '尋路 (時空渡口)' : `尋路 (35${curUnit})`;
@@ -6008,40 +6014,48 @@ class GameController {
     }
   }
 
-  // 判斷當前時代是否已破關 (已完成當前篇章所有人物視角或已在 completedEras)
-  // 判斷當前時代是否已破關 (通關核心歷史角色或已解鎖下一時代)
+  // 判斷當前角色是否有正在進行中的歷史決策任務
+  hasActiveQuest() {
+    if (!this.state || !this.state.currentNodeId) return false;
+    if (this.state.currentNodeId === 'node_settlement') return false;
+    const node = this.models.EVENT_NODES ? this.models.EVENT_NODES[this.state.currentNodeId] : null;
+    return !!(node && node.options && node.options.length > 0);
+  }
+
+  // 判斷當前時代是否已破關 (必須通關當前時代全部角色視角)
   isCurrentEraCompleted() {
     if (!this.currentEra) return false;
-    // 1. 已列入 completedEras
-    if (this.playerMaster && this.playerMaster.completedEras && this.playerMaster.completedEras.includes(this.currentEra.id)) {
-      return true;
-    }
-    const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
-    // 2. 下一時代已在 unlockedEras 列表中
-    if (curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length) {
-      const nextEra = this.models.HISTORICAL_ERAS[curEraIdx + 1];
-      if (this.playerMaster && this.playerMaster.unlockedEras && this.playerMaster.unlockedEras.includes(nextEra.id)) {
-        return true;
-      }
-    }
-    // 3. 檢查本年代角色通關數：只要通關 1 位角色（當前歷史主線完成），即視為本時代已破關，開放時空穿越！
     const curEraPerspectives = this.currentEra.perspectives || [];
-    if (curEraPerspectives.length > 0 && this.playerMaster && this.playerMaster.completedPerspectives) {
+    const totalPerspectiveCount = curEraPerspectives.length;
+    if (totalPerspectiveCount === 0) return true;
+
+    if (this.playerMaster && this.playerMaster.completedPerspectives) {
       const doneCount = curEraPerspectives.filter(p => this.playerMaster.completedPerspectives.includes(p.id)).length;
-      if (doneCount >= 1) {
-        if (!this.playerMaster.completedEras.includes(this.currentEra.id)) {
+      const allDone = doneCount >= totalPerspectiveCount;
+
+      if (allDone) {
+        if (this.playerMaster.completedEras && !this.playerMaster.completedEras.includes(this.currentEra.id)) {
           this.playerMaster.completedEras.push(this.currentEra.id);
         }
+        const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
         if (curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length) {
           const nextEra = this.models.HISTORICAL_ERAS[curEraIdx + 1];
-          if (!this.playerMaster.unlockedEras.includes(nextEra.id)) {
+          if (this.playerMaster.unlockedEras && !this.playerMaster.unlockedEras.includes(nextEra.id)) {
             this.playerMaster.unlockedEras.push(nextEra.id);
           }
         }
         this.saveMasterProfile();
         return true;
+      } else {
+        // 若本時代尚未全人物通關，主動修復清理被舊版誤加入的 completedEras
+        if (this.playerMaster.completedEras && this.playerMaster.completedEras.includes(this.currentEra.id)) {
+          this.playerMaster.completedEras = this.playerMaster.completedEras.filter(id => id !== this.currentEra.id);
+          this.saveMasterProfile();
+        }
+        return false;
       }
     }
+
     return false;
   }
 
@@ -6703,7 +6717,7 @@ class GameController {
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
     const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
     const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
-    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted();
+    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted() && !this.hasActiveQuest();
 
     ctx.save();
 
