@@ -948,40 +948,41 @@ class GameController {
 
     // 檢查東方時空界線與躍遷判定 (往右走跨越至下一個年代/時空)
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
-    const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
-    const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
+    const nextEraIdx = curEraIdx !== -1 ? (curEraIdx + 1) % this.models.HISTORICAL_ERAS.length : 0;
+    const nextEra = this.models.HISTORICAL_ERAS[nextEraIdx];
     const isEraCompleted = this.isCurrentEraCompleted();
-    const canCrossToNext = hasNextEra && isEraCompleted && !this.hasActiveQuest();
+    const canCrossToNext = isEraCompleted && !this.hasActiveQuest();
 
-    if (hasNextEra) {
-      if (!canCrossToNext) {
-        // 🔒 尚未全通關或任務進行中：東方邊界 x >= 1840 形成時空封印壁障！
-        if (this.hero.x >= 1840) {
-          this.hero.x = 1840;
-          this.hero.vx = -2.5;
-          if (this.hero.navTarget && this.hero.navTarget.x > 1830) {
-            this.hero.navTarget = null;
+    if (!canCrossToNext) {
+      // 🔒 尚未全通關或任務進行中：東方邊界 x >= 1840 形成時空封印壁障！
+      if (this.hero.x >= 1840) {
+        this.hero.x = 1840;
+        this.hero.vx = -2.5;
+        if (this.hero.navTarget && this.hero.navTarget.x > 1830) {
+          this.hero.navTarget = null;
+        }
+        if (!this._lastBarrierWarning || Date.now() - this._lastBarrierWarning > 2500) {
+          this._lastBarrierWarning = Date.now();
+          if (window.soundFx) {
+            if (window.soundFx.playCritical) window.soundFx.playCritical();
+            else window.soundFx.playClick();
           }
-          if (!this._lastBarrierWarning || Date.now() - this._lastBarrierWarning > 2500) {
-            this._lastBarrierWarning = Date.now();
-            if (window.soundFx) {
-              if (window.soundFx.playCritical) window.soundFx.playCritical();
-              else window.soundFx.playClick();
-            }
-            if (this.hasActiveQuest()) {
-              this.showToast(`🔒 任務進行中！請先完成當前角色【${this.state.identityName}】的歷史抉擇任務，再行穿越時空！`, 4000);
-              this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 請先完成角色歷史抉擇！', '#f43f5e', 22);
-            } else {
-              this.showToast(`🔒 尚未全破！需通關本時代【${this.currentEra.title}】全部歷史人物視角，方可穿越至下一年代！可查閱上方【📜 秘笈】！`, 4000);
-              this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 請先完成全部人物視角！', '#f43f5e', 22);
-            }
+          if (this.hasActiveQuest()) {
+            this.showToast(`🔒 任務進行中！請先完成當前角色【${this.state.identityName}】的歷史抉擇任務，再行穿越時空！`, 4000);
+            this.addFloatingText(this.hero.x, this.hero.y - 50, '🔒 請先完成角色歷史抉擇！', '#f43f5e', 22);
+          } else {
+            const curEraPerspectives = this.currentEra ? (this.currentEra.perspectives || []) : [];
+            const totalCount = curEraPerspectives.length;
+            const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id)).length;
+            this.showToast(`🔒 尚未全破！需通關本時代【${this.currentEra.title}】全部角色視角（目前 ${doneCount}/${totalCount}），方可開啟東方渡口！可查閱上方【📜 秘笈】！`, 4000);
+            this.addFloatingText(this.hero.x, this.hero.y - 50, `🔒 需全角色通關 (${doneCount}/${totalCount})！`, '#f43f5e', 22);
           }
         }
-      } else {
-        // ✨ 已破關且無進行中任務：玩家一直往右走，踏入東方時空渡口 (x >= 1860) 即可跨越至下一個年代！
-        if (this.hero.x >= 1860) {
-          this.jumpToNextEraSpacetime(nextEra.id);
-        }
+      }
+    } else {
+      // ✨ 已全破關且無進行中任務：玩家一直往右走，踏入東方時空渡口 (x >= 1860) 即可跨越至下一個年代！
+      if (this.hero.x >= 1860) {
+        this.jumpToNextEraSpacetime(nextEra.id);
       }
     }
 
@@ -1151,11 +1152,11 @@ class GameController {
 
     // 檢查東方時空長河躍遷渡口 (Next Era Portal)
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
-    const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
-    const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
-    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted() && !this.hasActiveQuest();
+    const nextEraIdx = curEraIdx !== -1 ? (curEraIdx + 1) % this.models.HISTORICAL_ERAS.length : 0;
+    const nextEra = this.models.HISTORICAL_ERAS[nextEraIdx];
+    const isNextUnlocked = this.isCurrentEraCompleted() && !this.hasActiveQuest();
 
-    if (!nearestZone && hasNextEra) {
+    if (!nearestZone && nextEra) {
       const portalX = 1880;
       const portalY = 420;
       const d = Math.hypot(this.hero.x - portalX, this.hero.y - portalY);
@@ -4270,19 +4271,17 @@ class GameController {
     mctx.stroke();
 
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
-    const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
-    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted() && !this.hasActiveQuest();
+    const isNextUnlocked = this.isCurrentEraCompleted() && !this.hasActiveQuest();
 
-    if (hasNextEra) {
-      if (!isNextUnlocked) {
-        // 小地圖標註封印壁障虛線
-        mctx.strokeStyle = '#f43f5e';
-        mctx.lineWidth = 1.5;
-        mctx.beginPath();
-        mctx.moveTo(toMapX(1840), 0);
-        mctx.lineTo(toMapX(1840), this.worldHeight * scaleY);
-        mctx.stroke();
-      }
+    if (!isNextUnlocked) {
+      // 小地圖標註封印壁障虛線
+      mctx.strokeStyle = '#f43f5e';
+      mctx.lineWidth = 1.5;
+      mctx.beginPath();
+      mctx.moveTo(toMapX(1840), 0);
+      mctx.lineTo(toMapX(1840), this.worldHeight * scaleY);
+      mctx.stroke();
+    }
       mctx.fillStyle = isNextUnlocked ? '#a855f7' : '#e11d48';
       mctx.beginPath();
       mctx.arc(toMapX(1880), 420 * scaleY, isNextUnlocked ? 4.5 : 3.5, 0, Math.PI * 2);
@@ -4421,17 +4420,18 @@ class GameController {
     const secretNavBtn = document.getElementById('secret-modal-nav-btn');
     const curUnit = (this.currentEra && this.currentEra.currencyUnit) || '兩';
 
-    // 若本時代已全通關且當前無進行中任務：切換為【🌌 時空長河穿越秘笈】
+    // 情況一：若本時代「所有角色皆已通關」且當前無進行中任務：切換為【🌌 時代大滿貫·時空長河穿越秘笈】
     if (this.isCurrentEraCompleted() && !this.hasActiveQuest()) {
-      if (badgeEl) badgeEl.innerText = '✨ 時代通關指引';
+      if (badgeEl) badgeEl.innerText = '✨ 時代大滿貫通關';
       if (titleEl) titleEl.innerText = '🌌 紀元星軌大道 · 時空穿越秘笈';
       if (tipEl) {
-        tipEl.innerHTML = '👉 <strong>本時代歷史抉擇已圓滿通關！</strong>請沿著中央星軌大道<strong class="text-yellow-300 text-xl font-black">【一直往右走 ▶】</strong>，穿過紀元星軌大道踏入<strong>【東方時空渡口】</strong>光門，即可穿越至下一個歷史時代！<br><span class="text-xs text-amber-300 font-bold">（往左走亦可踏入【西方時空渡口】回溯/漫遊時空喔！）</span>';
+        tipEl.innerHTML = '👉 <strong>本時代所有歷史人物視角皆已圓滿通關！</strong>請沿著中央星軌大道<strong class="text-yellow-300 text-xl font-black">【一直往右走 ▶】</strong>，穿過紀元星軌大道踏入<strong>【東方時空渡口】</strong>光門，即可跨越至下一個歷史時代！<br><span class="text-xs text-amber-300 font-bold">（往左走亦可踏入【西方時空渡口】回溯/漫遊時空喔！）</span>';
       }
       if (loreEl) {
         loreEl.innerText = '📜 歷史長河波瀾壯闊，下一個時代的歷史大門已為您開啟！向前奔馳踏入時空漩渦，引領新的歷史浪潮！';
       }
       if (spacetimeBanner) {
+        spacetimeBanner.classList.remove('hidden');
         spacetimeBanner.className = 'p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/90 to-teal-950/90 border-2 border-emerald-400/80 mb-3 flex items-start gap-2.5 animate-pulse';
       }
       if (spacetimeDesc) {
@@ -4439,6 +4439,46 @@ class GameController {
       }
       if (secretNavBtn) {
         secretNavBtn.innerHTML = '<span>🧭</span><span>引路前往東方渡口</span>';
+        secretNavBtn.onclick = () => { this.closeModal('quest-secret-modal'); this.autoNavigateToCurrentQuest(); };
+      }
+      const modal = document.getElementById('quest-secret-modal');
+      if (modal) modal.classList.remove('hidden');
+      return;
+    }
+
+    // 情況二：當前角色任務已做完結算，但「本時代尚未全角色通關」：切換為【📜 篇章角色接續傳承秘笈】
+    if (!this.hasActiveQuest()) {
+      const curEraPerspectives = this.currentEra ? (this.currentEra.perspectives || []) : [];
+      const totalCount = curEraPerspectives.length;
+      const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id)).length;
+      const curIdx = curEraPerspectives.findIndex(p => p.id === this.state.identityId);
+      let nextP = null;
+      for (let i = 1; i <= totalCount; i++) {
+        const candidate = curEraPerspectives[(curIdx + i) % totalCount];
+        if (!this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(candidate.id)) {
+          nextP = candidate;
+          break;
+        }
+      }
+      if (!nextP) nextP = curEraPerspectives[(curIdx + 1) % totalCount];
+
+      if (badgeEl) badgeEl.innerText = '📜 篇章演繹推進中';
+      if (titleEl) titleEl.innerText = `📜 ${this.currentEra ? this.currentEra.year : ''} · 篇章角色接續秘笈`;
+      if (tipEl) {
+        tipEl.innerHTML = `👉 你已圓滿完成【${this.state.identityName}】的歷史演繹！本篇章目前進度【${doneCount} / ${totalCount} 位角色】。<br><strong class="text-amber-300">需通關本篇章全部歷史人物後，方可開啟東方時空渡口！</strong><br>請接續演繹下一位歷史人物【<strong>${nextP.name}</strong> · ${nextP.title}】！`;
+      }
+      if (loreEl) {
+        loreEl.innerText = `📖 【${nextP.name}】歷史核心使命：${nextP.briefGoal || nextP.title || '深入體驗不同歷史人物的視角與時代風貌！'}`;
+      }
+      if (spacetimeBanner) {
+        spacetimeBanner.classList.add('hidden');
+      }
+      if (secretNavBtn) {
+        secretNavBtn.innerHTML = `<span>🔀</span><span>接續演繹【${nextP.name}】</span>`;
+        secretNavBtn.onclick = () => {
+          this.closeModal('quest-secret-modal');
+          this.selectPerspectiveAndStartGame(this.currentEra.id, nextP.id);
+        };
       }
       const modal = document.getElementById('quest-secret-modal');
       if (modal) modal.classList.remove('hidden');
@@ -4510,19 +4550,16 @@ class GameController {
 
     // 時空穿越秘笈僅在破關後動態呈現，任務進行中隱藏，保持秘笈簡約清爽
     if (spacetimeBanner) {
-      if (this.isCurrentEraCompleted()) {
-        spacetimeBanner.classList.remove('hidden');
-        if (spacetimeDesc) {
-          spacetimeDesc.innerHTML = '🎉 本時代已通關！請沿大道<strong class="text-yellow-300">【一直往右走 ▶】</strong>踏入時空渡口前往下一時代。';
-        }
-      } else {
-        spacetimeBanner.classList.add('hidden');
-      }
+      spacetimeBanner.classList.add('hidden');
     }
 
     const GUIDE_FEE = 35;
     if (secretNavBtn) {
       secretNavBtn.innerHTML = `<span>🧭</span><span>僱嚮導帶路 (${GUIDE_FEE}${curUnit})</span>`;
+      secretNavBtn.onclick = () => {
+        this.closeModal('quest-secret-modal');
+        this.autoNavigateToCurrentQuest();
+      };
     }
 
     const modal = document.getElementById('quest-secret-modal');
@@ -4531,12 +4568,32 @@ class GameController {
 
   // 自動尋路功能 (依據時代花費貨幣僱用嚮導引路，破關後免費引路至時空渡口)
   autoNavigateToCurrentQuest() {
-    // 若本時代已全通關且當前無進行中任務：直接引路至東方時空渡口！
+    // 1. 若本時代已全通關且當前無進行中任務：直接引路至東方時空渡口！
     if (this.isCurrentEraCompleted() && !this.hasActiveQuest()) {
       const portalX = 1880;
       const portalY = 420;
       this.setNavTarget(portalX, portalY, '東方時空渡口');
-      this.showToast('🧭 嚮導引路：本時代已通關！請沿著大道【一直往右走 ▶】踏入時空渡口！', 4000);
+      this.showToast('🧭 嚮導引路：本時代全部人物已通關！請沿著大道【一直往右走 ▶】踏入時空渡口！', 4000);
+      return;
+    }
+
+    // 2. 若當前無任務但時代尚未全通關：引導接續演繹下一角色！
+    if (!this.hasActiveQuest()) {
+      const curEraPerspectives = this.currentEra ? (this.currentEra.perspectives || []) : [];
+      const totalCount = curEraPerspectives.length;
+      const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id)).length;
+      const curIdx = curEraPerspectives.findIndex(p => p.id === this.state.identityId);
+      let nextP = null;
+      for (let i = 1; i <= totalCount; i++) {
+        const candidate = curEraPerspectives[(curIdx + i) % totalCount];
+        if (!this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(candidate.id)) {
+          nextP = candidate;
+          break;
+        }
+      }
+      if (!nextP) nextP = curEraPerspectives[(curIdx + 1) % totalCount];
+      this.showToast(`🔀 當前角色演繹已完成！本篇章進度 (${doneCount}/${totalCount})，需全角色通關方可開啟渡口！請接續演繹【${nextP ? nextP.name : ''}】！`, 4500);
+      this.showEraSelectModal(this.currentEraId);
       return;
     }
 
@@ -5339,6 +5396,45 @@ class GameController {
         nextEraBtn.innerHTML = `<span>🔒</span><span>下個年代未解鎖 (${eraDoneCount}/${eraPerspectives.length}角色)</span>`;
       }
     }
+    // 動態更新時空渡口指引條：全破時引導渡口，未全破時引導接續下一角色
+    const reportSpacetimeBanner = document.getElementById('report-spacetime-banner');
+    const reportSpacetimeTitle = document.getElementById('report-spacetime-title');
+    const reportSpacetimeDesc = document.getElementById('report-spacetime-desc');
+    const reportSpacetimeBtn = document.getElementById('report-spacetime-btn');
+
+    if (reportSpacetimeBanner) {
+      if (isEraAllCompleted) {
+        reportSpacetimeBanner.className = 'p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/90 to-teal-950/90 border border-emerald-400/60 mb-5 flex items-center justify-between gap-3 text-left animate-pulse';
+        if (reportSpacetimeTitle) reportSpacetimeTitle.innerText = '🌌 榮耀大滿貫！本時代所有歷史人物全數通關！';
+        if (reportSpacetimeDesc) reportSpacetimeDesc.innerText = '返回地圖後【一直往右走 ▶】即可踏入東方時空渡口跨越至下一時代！';
+        if (reportSpacetimeBtn) {
+          reportSpacetimeBtn.innerHTML = '<span>🧭</span><span>引路前往渡口</span>';
+          reportSpacetimeBtn.onclick = () => { this.closeModal('settlement-modal'); this.autoNavigateToCurrentQuest(); };
+        }
+      } else {
+        const curIdx = this.currentEra.perspectives.findIndex(p => p.id === this.state.identityId);
+        let nextUncompletedP = null;
+        for (let i = 1; i <= eraPerspectives.length; i++) {
+          const cand = eraPerspectives[(curIdx + i) % eraPerspectives.length];
+          if (!this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(cand.id)) {
+            nextUncompletedP = cand;
+            break;
+          }
+        }
+        if (!nextUncompletedP) nextUncompletedP = eraPerspectives[(curIdx + 1) % eraPerspectives.length];
+
+        reportSpacetimeBanner.className = 'p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/90 to-slate-900/90 border border-purple-400/50 mb-5 flex items-center justify-between gap-3 text-left';
+        if (reportSpacetimeTitle) reportSpacetimeTitle.innerText = `⏳ 篇章進行中：已通關 (${eraDoneCount}/${eraPerspectives.length}) 位角色`;
+        if (reportSpacetimeDesc) reportSpacetimeDesc.innerText = `需通關本篇章全部歷史人物方可開啟時空渡口！請接續演繹【${nextUncompletedP.name}】。`;
+        if (reportSpacetimeBtn) {
+          reportSpacetimeBtn.innerHTML = `<span>🔀</span><span>接續演繹【${nextUncompletedP.name}】</span>`;
+          reportSpacetimeBtn.onclick = () => {
+            this.closeModal('settlement-modal');
+            this.selectPerspectiveAndStartGame(this.currentEra.id, nextUncompletedP.id);
+          };
+        }
+      }
+    }
 
     modal.classList.remove('hidden');
   }
@@ -5411,12 +5507,6 @@ class GameController {
       minimapYear.innerText = this.currentEra.minimapYearBadge;
     }
 
-    const isCompleted = this.isCurrentEraCompleted() && !this.hasActiveQuest();
-    const navBtnText = document.getElementById('nav-btn-text');
-    if (navBtnText) {
-      navBtnText.innerText = isCompleted ? '尋路 (時空渡口)' : `尋路 (35${curUnit})`;
-    }
-
     const hintWorkText = document.getElementById('hint-work-text');
     if (hintWorkText) hintWorkText.innerText = workName;
 
@@ -5429,15 +5519,39 @@ class GameController {
       quickClueBadge.className = this.state.unlockedClues.length > 0 ? 'text-xs px-2 py-0.5 rounded bg-emerald-500/30 text-emerald-300 font-bold' : 'text-xs px-2 py-0.5 rounded bg-amber-500/30 text-amber-300 font-bold';
     }
 
-    // 3. 頂部任務條排版 (安全容錯拆分，防止 undefined 異常中斷渲染)
     const currentNode = this.models.EVENT_NODES[this.state.currentNodeId];
+    const isCompleted = this.isCurrentEraCompleted() && !this.hasActiveQuest();
+    const navBtnText = document.getElementById('nav-btn-text');
     const eraTag = document.getElementById('quest-era-tag');
     const titleText = document.getElementById('quest-title-text');
 
     if (isCompleted) {
+      if (navBtnText) navBtnText.innerText = '尋路 (時空渡口)';
       if (eraTag) eraTag.innerText = '時空渡口已啟動';
-      if (titleText) titleText.innerText = '✨ 本時代任務已通關！請【一直往右走 ▶】前往時空渡口穿越至下一時代！';
+      if (titleText) titleText.innerText = '✨ 本時代所有人物已全通關！請【一直往右走 ▶】前往時空渡口穿越至下一時代！';
+    } else if (!this.hasActiveQuest()) {
+      // 當前角色已完成，但本時代尚未全部通關
+      const curEraPerspectives = this.currentEra ? (this.currentEra.perspectives || []) : [];
+      const totalCount = curEraPerspectives.length;
+      const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id)).length;
+      const curIdx = curEraPerspectives.findIndex(p => p.id === this.state.identityId);
+      let nextP = null;
+      for (let i = 1; i <= totalCount; i++) {
+        const candidate = curEraPerspectives[(curIdx + i) % totalCount];
+        if (!this.playerMaster || !this.playerMaster.completedPerspectives || !this.playerMaster.completedPerspectives.includes(candidate.id)) {
+          nextP = candidate;
+          break;
+        }
+      }
+      if (!nextP) nextP = curEraPerspectives[(curIdx + 1) % totalCount];
+
+      if (navBtnText) navBtnText.innerText = `接續 (${nextP ? nextP.name : '下個人物'})`;
+      if (eraTag) eraTag.innerText = `篇章進度 ${doneCount}/${totalCount}`;
+      if (titleText) {
+        titleText.innerText = `✨ 已完成【${this.state.identityName}】！請接續演繹本篇章下一位角色【${nextP ? nextP.name : ''}】(${doneCount}/${totalCount})`;
+      }
     } else {
+      if (navBtnText) navBtnText.innerText = `尋路 (35${curUnit})`;
       if (eraTag) {
         if (currentNode && currentNode.era) {
           const parts = currentNode.era.split(' · ');
@@ -6354,7 +6468,7 @@ class GameController {
   proceedToNextEra() {
     this.closeModal('settlement-modal');
 
-    // 嚴格校驗：本年代是否已 3 位角色全部通關
+    // 嚴格校驗：本年代是否已全部角色通關
     const curEra = this.currentEra;
     const curEraPerspectives = curEra ? curEra.perspectives : [];
     const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives.includes(p.id)).length;
@@ -6362,7 +6476,7 @@ class GameController {
 
     if (!isEraAllCompleted) {
       if (window.soundFx) window.soundFx.playClick();
-      this.showToast(`🔒 下一個年代尚未解鎖：需先通關【${curEra ? curEra.title : '本年代'}】全部 3 位角色（目前 ${doneCount}/${curEraPerspectives.length}）！`, 4000);
+      this.showToast(`🔒 下一個年代尚未解鎖：需先通關【${curEra ? curEra.title : '本年代'}】全部 ${curEraPerspectives.length} 位角色（目前 ${doneCount}/${curEraPerspectives.length}）！`, 4000);
       // 打開歷史長河選單引導選擇下一位角色
       this.showEraSelectModal(this.currentEraId);
       return;
@@ -6715,14 +6829,14 @@ class GameController {
 
   drawSpacetimePortals(ctx) {
     const curEraIdx = this.models.HISTORICAL_ERAS.findIndex(e => e.id === this.currentEraId);
-    const hasNextEra = curEraIdx !== -1 && curEraIdx + 1 < this.models.HISTORICAL_ERAS.length;
-    const nextEra = hasNextEra ? this.models.HISTORICAL_ERAS[curEraIdx + 1] : null;
-    const isNextUnlocked = hasNextEra && this.isCurrentEraCompleted() && !this.hasActiveQuest();
+    const nextEraIdx = curEraIdx !== -1 ? (curEraIdx + 1) % this.models.HISTORICAL_ERAS.length : 0;
+    const nextEra = this.models.HISTORICAL_ERAS[nextEraIdx];
+    const isNextUnlocked = this.isCurrentEraCompleted() && !this.hasActiveQuest();
 
     ctx.save();
 
     // ==================== 1. 東方時空長河躍遷渡口 (x: 1880, y: 420) 與封印壁障 ====================
-    if (hasNextEra) {
+    if (nextEra) {
       const pX = 1880;
       const pY = 420;
 
@@ -6887,12 +7001,19 @@ class GameController {
         ctx.font = 'bold 11px sans-serif';
         ctx.fillText('✨ 已通關！一直往右走即可跨入下一時代', pX, bannerY + 36);
       } else {
+        const curEraPerspectives = this.currentEra ? (this.currentEra.perspectives || []) : [];
+        const totalCount = curEraPerspectives.length;
+        const doneCount = curEraPerspectives.filter(p => this.playerMaster && this.playerMaster.completedPerspectives && this.playerMaster.completedPerspectives.includes(p.id)).length;
         ctx.fillStyle = '#fca5a5';
         ctx.font = 'bold 14px "Noto Serif TC", serif';
         ctx.fillText(`🔒 時空界線封印 · 前方【${nextEra.title}】`, pX, bannerY + 18);
         ctx.fillStyle = '#fda4af';
         ctx.font = 'bold 11px sans-serif';
-        ctx.fillText('需先完成當前歷史抉擇任務，方可通行', pX, bannerY + 36);
+        if (this.hasActiveQuest()) {
+          ctx.fillText('需先完成當前角色歷史抉擇任務，方可通行', pX, bannerY + 36);
+        } else {
+          ctx.fillText(`需通關本篇章全部角色 (${doneCount}/${totalCount})，方可通行`, pX, bannerY + 36);
+        }
       }
     }
 
